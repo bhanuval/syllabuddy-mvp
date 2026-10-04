@@ -7,7 +7,7 @@ from datetime import datetime
 from io import BytesIO
 
 from dotenv import load_dotenv
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, g, jsonify, request, send_from_directory
 from openai import OpenAI
 
 # Load secrets from .env in this folder. The key never goes to the browser.
@@ -119,6 +119,7 @@ app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST_BYTES
 _hits = {}
 ROOT = os.path.dirname(os.path.abspath(__file__))
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
+OLD_OFFICE_EXTS = {".doc", ".xls", ".ppt"}
 TEXT_EXTS = {
     ".txt",
     ".md",
@@ -525,8 +526,17 @@ def read_uploaded_files(files):
             continue
         if len(data) > MAX_FILE_BYTES:
             raise RuntimeError(filename + " is larger than 12 MB.")
-        names.append(os.path.basename(filename))
         ext = os.path.splitext(filename)[1].lower()
+        if ext in OLD_OFFICE_EXTS:
+            raise RuntimeError(
+                os.path.basename(filename)
+                + " is an older Office format. Save it as .docx, .xlsx, .pptx, or PDF and upload it again."
+            )
+        supported = IMAGE_EXTS | TEXT_EXTS | {".pdf", ".docx", ".xlsx", ".xlsm", ".pptx", ""}
+        if ext not in supported or os.path.basename(filename).startswith("."):
+            g.skipped = getattr(g, "skipped", []) + [os.path.basename(filename)]   # for example .DS_Store or .zip inside a folder
+            continue
+        names.append(os.path.basename(filename))
         label = "File: " + os.path.basename(filename)
         try:
             if ext in IMAGE_EXTS:
@@ -547,8 +557,6 @@ def read_uploaded_files(files):
                 texts.append(label + "\n" + extract_xlsx(data))
             elif ext == ".pptx":
                 texts.append(label + "\n" + extract_pptx(data))
-            elif ext in TEXT_EXTS or ext == "":
-                texts.append(label + "\n" + decode_bytes(data))
             else:
                 texts.append(label + "\n" + decode_bytes(data))
         except Exception as error:
@@ -682,6 +690,7 @@ def extract():
             "course": course,
             "origin": origin,
             "files": names,
+            "skipped": getattr(g, "skipped", []),
         }
     )
 

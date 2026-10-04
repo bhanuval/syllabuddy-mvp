@@ -75,6 +75,8 @@
     <button id="ics" class="secondary">Download calendar (.ics)</button>
     <button id="csv" class="secondary">Download CSV</button>
     <button id="clear" class="secondary">Clear list</button>
+    <button id="uploadFiles" class="secondary" type="button">Upload files</button>
+    <input id="files" type="file" multiple accept=".pdf,.docx,.xlsx,.xlsm,.pptx,.txt,.md,.csv,.tsv,.rtf,.png,.jpg,.jpeg,.gif,.webp" style="display:none">
     <button id="uploadFolder" class="secondary" type="button">Upload a folder</button>
     <input id="folder" type="file" webkitdirectory multiple>
   </div>
@@ -359,21 +361,29 @@ loadRows();
 });
 
 const folderInput = document.getElementById("folder");
+const filesInput = document.getElementById("files");
 const folderList = document.getElementById("folderList");
+
+function chosenFiles() {
+  return [...filesInput.files, ...folderInput.files];
+}
 
 function listFolder() {
   folderList.innerHTML = "";
-  [...folderInput.files].forEach((file) => {
+  const all = chosenFiles();
+  all.forEach((file) => {
     const li = document.createElement("li");
     li.textContent = file.webkitRelativePath || file.name;
     folderList.appendChild(li);
   });
-  if (folderInput.files.length) {
-    status.textContent = "Loaded " + folderInput.files.length + " file(s) from the folder. Click Build schedule with AI to turn them into a schedule.";
+  if (all.length) {
+    status.textContent = "Loaded " + all.length + " file(s). Click Build schedule with AI to turn them into a schedule.";
   }
 }
 
+document.getElementById("uploadFiles").addEventListener("click", () => filesInput.click());
 document.getElementById("uploadFolder").addEventListener("click", () => folderInput.click());
+filesInput.addEventListener("change", listFolder);
 folderInput.addEventListener("change", listFolder);
 
 function toHHMM(hour, minute, period, otherPeriod) {
@@ -485,9 +495,9 @@ document.getElementById("extract").addEventListener("click", async () => {
   const origin = document.getElementById("origin").value;
   const syllabus = document.getElementById("syllabus").value;
   const defaultTime = document.getElementById("defaultTime").value;
-  const files = [...folderInput.files];
+  const files = chosenFiles();
   if (!syllabus.trim() && files.length === 0) {
-    status.textContent = "Paste a syllabus or upload a folder first.";
+    status.textContent = "Paste a syllabus or upload files first.";
     return;
   }
   const button = document.getElementById("extract");

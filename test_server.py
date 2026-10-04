@@ -95,6 +95,13 @@ d = Document(); d.add_paragraph("Quiz 1 due Oct 12 at 6 PM"); b = io.BytesIO(); 
 r = c.post("/extract", data={"files": (b, "syl.docx")}, content_type="multipart/form-data")
 assert r.status_code == 200 and r.get_json()["files"] == ["syl.docx"]
 
+# Old Office formats get a clear message; unsupported files inside a folder are skipped, not sent to the AI
+r = c.post("/extract", data={"files": (io.BytesIO(b"old"), "old.doc")}, content_type="multipart/form-data")
+assert r.status_code == 400 and "older Office format" in r.get_json()["error"]
+Server.extract_items = fake
+r = c.post("/extract", data={"files": [(io.BytesIO(b"junk"), ".DS_Store"), (io.BytesIO(b"Quiz 1 due Oct 12"), "notes.txt")]}, content_type="multipart/form-data")
+assert r.status_code == 200 and r.get_json()["files"] == ["notes.txt"] and r.get_json()["skipped"] == [".DS_Store"], r.get_json()
+
 # A provider error must not reach the browser
 def boom(*a, **k): raise Exception("Incorrect API key provided: sk-proj-abcd...wxyz")
 Server.extract_items = boom
