@@ -34,6 +34,33 @@ assert rd[0]["due"] == "" and "publication date" in rd[0]["flag"]
 assert rd[1]["due"] == "2026-10-09"
 Server.extract_items = fake
 
+# Duplicates: near-identical titles merge into the dated row; looser matches are flagged, not deleted
+def row(kind, name, due, source="x"):
+    return {"type": kind, "item": name, "due": due, "time": "", "source": source, "details": "", "link": "", "flag": ""}
+rows = [
+    row("Assignment", "Bus. Analy. using Orange (1): Introduction", "2026-09-20"),
+    row("Assignment", "Bus. Analy. using Orange (2): Decision Trees", "2026-10-04"),
+    row("Assignment", "Building a Customer Service Agent with n8n", "2026-11-15"),
+    row("Assignment", "Business Analytics using Orange: Introduction", ""),
+    row("Assignment", "Business Analytics using Orange: Decision Trees", ""),
+    row("Assignment", "Building AI Agents with n8n", ""),
+    row("Reading", "Some reading", ""),
+]
+merged = Server.merge_duplicates(Server.clean_items(rows, "x"))
+names = [m["item"] for m in merged]
+assert "Business Analytics using Orange: Introduction" not in names and "Business Analytics using Orange: Decision Trees" not in names
+assert len(merged) == 5, names
+flagged = [m for m in merged if m["item"] == "Building AI Agents with n8n"][0]
+assert "possible duplicate of: Building a Customer Service Agent" in flagged["flag"]
+assert any(m["type"] == "Reading" for m in merged)
+
+# A source that is only a row number is replaced by the matching pasted line
+text = "1\nBus. Analy. using Orange (1): Introduction\nSunday, Sept. 20\n2\nBus. Analy. using Orange (2): Decision Trees\nSunday, Oct. 4"
+cl = Server.clean_items([row("Assignment", "Bus. Analy. using Orange (2): Decision Trees", "2026-10-04", "2")], text)
+assert cl[0]["source"] == "Bus. Analy. using Orange (2): Decision Trees | Sunday, Oct. 4", cl[0]["source"]
+cl = Server.clean_items([row("Assignment", "Totally unrelated", "2026-10-04", "7")], text)
+assert cl[0]["source"] == "" and "no source line found" in cl[0]["flag"]
+
 from docx import Document
 d = Document(); d.add_paragraph("Quiz 1 due Oct 12 at 6 PM"); b = io.BytesIO(); d.save(b); b.seek(0)
 r = c.post("/extract", data={"files": (b, "syl.docx")}, content_type="multipart/form-data")

@@ -66,7 +66,8 @@ Rules:
 - If date or time cannot be known, leave that field "".
 - Dates that appear inside a reading's citation are publication dates, not due dates. Examples: "(2023, May-June)", "5 Apr. 2024", "Harvard Business Review, 16 March", "(2025, Sept. 26)". Never use a publication date as any item's date.
 - A reading listed under a class session takes that session's class date, but only when the text gives that session's date. If the session has no date, leave the reading's due empty.
-- source must be a short quote copied from the pasted text.
+- source must be a short quote copied from the pasted text. It must include the item's name or its date. Never use a row number alone as the source.
+- If the same item is listed more than once (for example once in a table of deliverables with a due date, and again under a class session with no date), return it once. Use the date and time from the entry that has them.
 - details is extra scope from the text only (end time, word limit, pages). Otherwise "".
 - link is a URL copied from the text only. Otherwise "".
 - flag is a short warning if something is unclear. Otherwise "".
@@ -218,6 +219,102 @@ def stale_reading(item_type, due):
     return age > STALE_READING_DAYS
 
 
+TITLE_STOPWORDS = {"a", "an", "the", "of", "and", "with", "for", "to", "in", "on", "by"}
+
+
+def title_tokens(text):
+    words = re.findall(r"[a-z0-9]+", (text or "").lower())
+    return [w for w in words if not w.isdigit() and w not in TITLE_STOPWORDS]
+
+
+def same_token(a, b):
+    """Equal, or one is an abbreviation (prefix) of the other, such as bus and business."""
+    if a == b:
+        return True
+    short, long = (a, b) if len(a) <= len(b) else (b, a)
+    return len(short) >= 3 and long.startswith(short)
+
+
+def token_overlap(ta, tb):
+    used = set()
+    common = 0
+    for x in ta:
+        for j, y in enumerate(tb):
+            if j not in used and same_token(x, y):
+                used.add(j)
+                common += 1
+                break
+    return common
+
+
+DATE_HINT = re.compile(
+    r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b|\d{1,2}/\d{1,2}", re.I
+)
+
+
+def find_source_line(name, syllabus):
+    """Used when the AI quotes only a row number: find the pasted line that best matches the item's name."""
+    tokens = title_tokens(name)
+    lines = (syllabus or "").splitlines()
+    best, best_common = None, 1
+    for idx, line in enumerate(lines):
+        common = token_overlap(tokens, title_tokens(line))
+        if common > best_common:
+            best, best_common = idx, common
+    if best is None:
+        return ""
+    text = lines[best].strip()
+    if best + 1 < len(lines) and DATE_HINT.search(lines[best + 1]):
+        text += " | " + lines[best + 1].strip()
+    return text[:180]
+
+
+def merge_duplicates(items):
+    """The same assignment often appears twice: in a deliverables table (with a date) and in a session outline (without).
+    Near-identical titles are merged into the dated row. Looser matches are flagged, not deleted, so the student decides."""
+    keep = [dict(i) for i in items]
+    removed = set()
+    used_dated = set()
+    plain = lambda k: keep[k]["type"] not in ("Reading", "Class")
+    dated = [k for k in range(len(keep)) if plain(k) and keep[k]["due"]]
+    undated = [k for k in range(len(keep)) if plain(k) and not keep[k]["due"]]
+    for u in undated:
+        tu = title_tokens(keep[u]["item"])
+        best = None
+        for d in dated:
+            if d in used_dated:
+                continue
+            td = title_tokens(keep[d]["item"])
+            common = token_overlap(tu, td)
+            diff = (len(tu) - common) + (len(td) - common)
+            if common >= 2 and diff <= 1 and (best is None or (diff, -common) < best[0]):
+                best = ((diff, -common), d)
+        if best:
+            d = best[1]
+            used_dated.add(d)
+            removed.add(u)
+            if not keep[d]["details"] and keep[u]["details"]:
+                keep[d]["details"] = keep[u]["details"]
+    for u in undated:
+        if u in removed:
+            continue
+        tu = title_tokens(keep[u]["item"])
+        best = None
+        for d in dated:
+            if d in used_dated:
+                continue
+            td = title_tokens(keep[d]["item"])
+            common = token_overlap(tu, td)
+            union = len(tu) + len(td) - common
+            score = common / union if union else 0
+            if common >= 2 and score >= 0.5 and (best is None or score > best[0]):
+                best = (score, d)
+        if best:
+            note = "possible duplicate of: " + keep[best[1]]["item"][:60]
+            keep[u]["flag"] = "; ".join(x for x in (keep[u]["flag"], note) if x)
+    return [i for k, i in enumerate(keep) if k not in removed]
+
+
 def appears_in(snippet, syllabus):
     hay = re.sub(r"\s+", " ", (syllabus or "").lower())
     needle = re.sub(r"\s+", " ", (snippet or "").strip().lower())
@@ -243,6 +340,13 @@ def clean_items(raw_items, syllabus=""):
         extra = str(raw.get("flag") or "").strip()
         if extra:
             flags.append(extra)
+        if syllabus and (len(source) < 4 or source.isdigit()):
+            repaired = find_source_line(name, syllabus)
+            if repaired:
+                source = repaired
+            else:
+                source = ""
+                flags.append("no source line found")
         if source and syllabus and not appears_in(source, syllabus):
             source = source[:180]
             flags.append("source not copied from paste")
@@ -441,7 +545,7 @@ def extract_items(syllabus, course, notes, images, default_time=""):
         parsed = json.loads(raw_text)
     except json.JSONDecodeError as error:
         raise RuntimeError("The AI did not return valid JSON.") from error
-    return clean_items(parsed.get("items"), syllabus)
+    return merge_duplicates(clean_items(parsed.get("items"), syllabus))
 
 
 def request_payload():
