@@ -23,6 +23,17 @@ items = c.post("/extract", json={"syllabus": "Quiz 1 due Oct 12"}).get_json()["i
 assert items[0]["time"] == "18:00" and items[0]["link"] == ""           # invented link removed
 assert items[1]["due"] == "" and "no date" in items[1]["flag"]          # impossible date blanked
 
+# A reading dated by its citation is blanked and flagged; a current class date is kept
+def fake_readings(syllabus, course, notes, images, default_time=""):
+    raw = [{"type": "Reading", "item": "When to Rely on Algorithms", "due": "2023-05-01", "time": "", "source": "Fantini, F. (2023, May-June)", "details": "", "link": "", "flag": ""},
+           {"type": "Reading", "item": "Chapter 1", "due": "2026-10-09", "time": "", "source": "Friday, 9-Oct", "details": "", "link": "", "flag": ""}]
+    return Server.clean_items(raw, syllabus + " Fantini, F. (2023, May-June) Friday, 9-Oct")
+Server.extract_items = fake_readings
+rd = c.post("/extract", json={"syllabus": "x"}).get_json()["items"]
+assert rd[0]["due"] == "" and "publication date" in rd[0]["flag"]
+assert rd[1]["due"] == "2026-10-09"
+Server.extract_items = fake
+
 from docx import Document
 d = Document(); d.add_paragraph("Quiz 1 due Oct 12 at 6 PM"); b = io.BytesIO(); d.save(b); b.seek(0)
 r = c.post("/extract", data={"files": (b, "syl.docx")}, content_type="multipart/form-data")

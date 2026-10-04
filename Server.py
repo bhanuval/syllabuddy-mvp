@@ -64,6 +64,8 @@ Rules:
 - For assignments, quizzes, exams, and projects, time must be a due time, not a lecture meeting time.
 - If the student provided a default due time, you may copy it onto dated Assignment/Quiz/Exam/Project rows with no time. Do not apply it to Class or Reading.
 - If date or time cannot be known, leave that field "".
+- Dates that appear inside a reading's citation are publication dates, not due dates. Examples: "(2023, May-June)", "5 Apr. 2024", "Harvard Business Review, 16 March", "(2025, Sept. 26)". Never use a publication date as any item's date.
+- A reading listed under a class session takes that session's class date, but only when the text gives that session's date. If the session has no date, leave the reading's due empty.
 - source must be a short quote copied from the pasted text.
 - details is extra scope from the text only (end time, word limit, pages). Otherwise "".
 - link is a URL copied from the text only. Otherwise "".
@@ -202,6 +204,20 @@ def weekday_mismatch(due, text):
     return ""
 
 
+STALE_READING_DAYS = 180
+
+
+def stale_reading(item_type, due):
+    """A reading dated long before today is almost always a citation (publication) date, not a due date."""
+    if item_type != "Reading" or not due:
+        return False
+    try:
+        age = (datetime.now() - datetime.strptime(due, "%Y-%m-%d")).days
+    except ValueError:
+        return False
+    return age > STALE_READING_DAYS
+
+
 def appears_in(snippet, syllabus):
     hay = re.sub(r"\s+", " ", (syllabus or "").lower())
     needle = re.sub(r"\s+", " ", (snippet or "").strip().lower())
@@ -237,6 +253,9 @@ def clean_items(raw_items, syllabus=""):
                 syllabus and link not in syllabus
             ):
                 link = ""
+        if stale_reading(item_type, due):
+            due = ""
+            flags.append("date removed: it looks like a publication date")
         mismatch = weekday_mismatch(due, name + " " + source)
         if mismatch:
             flags.append(mismatch)
