@@ -77,8 +77,6 @@
     <button id="clear" class="secondary">Clear list</button>
     <button id="uploadFiles" class="secondary" type="button">Upload files</button>
     <input id="files" type="file" multiple accept=".pdf,.docx,.xlsx,.xlsm,.pptx,.txt,.md,.csv,.tsv,.rtf,.png,.jpg,.jpeg,.gif,.webp" style="display:none">
-    <button id="uploadFolder" class="secondary" type="button">Upload a folder</button>
-    <input id="folder" type="file" webkitdirectory multiple>
   </div>
   <ul id="folderList" class="note"></ul>
   <div class="row">
@@ -360,12 +358,11 @@ loadRows();
   document.getElementById(id).addEventListener("change", saveRows);
 });
 
-const folderInput = document.getElementById("folder");
 const filesInput = document.getElementById("files");
 const folderList = document.getElementById("folderList");
 
 function chosenFiles() {
-  return [...filesInput.files, ...folderInput.files];
+  return [...filesInput.files];
 }
 
 function listFolder() {
@@ -382,9 +379,7 @@ function listFolder() {
 }
 
 document.getElementById("uploadFiles").addEventListener("click", () => filesInput.click());
-document.getElementById("uploadFolder").addEventListener("click", () => folderInput.click());
 filesInput.addEventListener("change", listFolder);
-folderInput.addEventListener("change", listFolder);
 
 function toHHMM(hour, minute, period, otherPeriod) {
   let h = Number(hour);

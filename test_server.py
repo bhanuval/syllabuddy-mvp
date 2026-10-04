@@ -90,6 +90,24 @@ assert by[("Reading", "Researchers Asked LLMs")]["due"] == "2026-09-12"         
 assert Server.date_from_text("Friday 4 September", 2026) == "2026-09-04"
 assert Server.date_from_text("Sunday, Feb. 30", 2026) == ""
 
+# Readings take their own session's class date; assignments missing a date can take it from their source line
+def r3(kind, name, due, source, session=""):
+    d = {"type": kind, "item": name, "due": due, "time": "", "source": source, "details": "", "link": "", "flag": "", "session": session}
+    return d
+sess_rows = [
+    r3("Class", "Agentic Operating Model I", "2026-10-30", "Friday, 30-Oct.", "4"),
+    r3("Reading", "The Agentic Organization", "2025-09-26", "McKinsey (2025, Sept. 26)", "4"),
+    r3("Reading", "Showing You My OpenClaw", "", "Azeem Azhar, 2006.", "4"),
+    r3("Reading", "State of AI in the Enterprise", "", "Deloitte (2026).", "5"),
+]
+out = {i["item"]: i for i in Server.drop_session_dates(Server.clean_items(sess_rows, "x"))}
+assert out["The Agentic Organization"]["due"] == "2026-10-30"
+assert out["Showing You My OpenClaw"]["due"] == "2026-10-30"
+assert out["State of AI in the Enterprise"]["due"] == ""
+syl = "1\nBus. Analy. using Orange (1): Introduction\nSunday, Sept. 20\n"
+fill = Server.clean_items([r3("Assignment", "Business Analytics using Orange: Introduction", "", "1")], syl)[0]
+assert fill["due"] == str(Server.datetime.now().year) + "-09-20" and "date taken from the source line" in fill["flag"], fill
+
 from docx import Document
 d = Document(); d.add_paragraph("Quiz 1 due Oct 12 at 6 PM"); b = io.BytesIO(); d.save(b); b.seek(0)
 r = c.post("/extract", data={"files": (b, "syl.docx")}, content_type="multipart/form-data")

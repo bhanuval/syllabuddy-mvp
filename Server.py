@@ -61,6 +61,8 @@ Rules:
 - item is a short title. Do not invent titles.
 - due must be YYYY-MM-DD when the text gives a real calendar date.
 - A class meeting takes the date shown with its session (for example "Saturday, 12-Sep." becomes that date). Leave a class meeting's due empty only if the text gives no date.
+- session is the number from the "Session N" heading the item sits under (for example "4"), or "" when the item is not under a session, such as a row in a table of deliverables.
+- Do not create a Class row for an asynchronous session that has no meeting date or time.
 - A reading listed under a class session takes that session's class date as due. A reading never takes a date from its citation.
 - An assignment listed under a class session does NOT take the session's class date. Give an assignment a due date only when the text states one for that assignment, for example in a table of deliverables. Otherwise leave its due empty.
 - If month and day are given but year is not, use the year from Today's date. If that date is invalid (for example February 30), set due to "".
@@ -88,7 +90,7 @@ ITEM_SCHEMA = {
             "items": {
                 "type": "object",
                 "additionalProperties": False,
-                "required": ["type", "item", "due", "time", "source", "details", "link", "flag"],
+                "required": ["type", "item", "due", "time", "source", "details", "link", "flag", "session"],
                 "properties": {
                     "type": {
                         "type": "string",
@@ -108,6 +110,7 @@ ITEM_SCHEMA = {
                     "details": {"type": "string"},
                     "link": {"type": "string"},
                     "flag": {"type": "string"},
+                    "session": {"type": "string"},
                 },
             },
         }
@@ -277,7 +280,11 @@ def drop_session_dates(items):
     """Readings only keep a date that matches a class meeting date. An assignment dated with a class date is dropped
     when a similar assignment has a different date, because the outline's session date is not a due date."""
     class_dates = {i["due"] for i in items if i["type"] == "Class" and i["due"]}
+    by_session = {i.get("session"): i["due"] for i in items if i["type"] == "Class" and i["due"] and i.get("session")}
     out = [dict(i) for i in items]
+    for i in out:
+        if i["type"] == "Reading" and i.get("session") in by_session:
+            i["due"] = by_session[i["session"]]       # a reading is due by its own session's class meeting
     for i in out:
         if i["type"] == "Reading" and i["due"] and class_dates and i["due"] not in class_dates:
             i["due"] = ""
@@ -400,6 +407,7 @@ def clean_items(raw_items, syllabus=""):
             due = date_from_text(source, datetime.now().year)
         details = str(raw.get("details") or "").strip()
         link = str(raw.get("link") or "").strip()
+        session = str(raw.get("session") or "").strip()
         flags = []
         extra = str(raw.get("flag") or "").strip()
         if extra:
@@ -421,6 +429,11 @@ def clean_items(raw_items, syllabus=""):
                 syllabus and link not in syllabus
             ):
                 link = ""
+        if not due and item_type not in ("Class", "Reading") and source:
+            from_source = date_from_text(source, datetime.now().year)
+            if from_source:
+                due = from_source
+                flags.append("date taken from the source line")
         if stale_reading(item_type, due):
             due = ""
             flags.append("date removed: it looks like a publication date")
@@ -439,6 +452,7 @@ def clean_items(raw_items, syllabus=""):
                 "details": details,
                 "link": link,
                 "flag": "; ".join(dict.fromkeys(flags)),
+                "session": session,
             }
         )
     return cleaned
