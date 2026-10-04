@@ -1,0 +1,8 @@
+flask
+openai>=1.68.0
+python-dotenv
+pypdf
+python-docx
+openpyxl
+python-pptx
+gunicorn

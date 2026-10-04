@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SyllaBuddy</title>
+<style>
+  :root { --ink:#1d2433; --muted:#5b6579; --line:#d5dae3; --bg:#f7f8fa; --accent:#1f5f8b; --warn:#fff4d6; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:16px/1.5 Georgia, "Times New Roman", serif; color:var(--ink); background:var(--bg); }
+  main { max-width:1100px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:1.6rem; margin:0 0 4px; }
+  p.sub { margin:0 0 20px; color:var(--muted); }
+  label { font-weight:bold; display:block; margin-bottom:6px; }
+  .grid { display:grid; grid-template-columns:2fr 1fr 1fr; gap:12px; margin-bottom:12px; }
+  @media (max-width:700px) { .grid { grid-template-columns:1fr; } }
+  input[type=text], input[type=time], select, textarea {
+    width:100%; padding:8px; font:inherit; border:1px solid var(--line); border-radius:4px; background:#fff;
+  }
+  textarea { min-height:180px; font:14px/1.4 ui-monospace, Menlo, monospace; }
+  td textarea { min-height:52px; font-size:.85rem; }
+  button { font:inherit; padding:8px 14px; border:1px solid var(--accent); background:var(--accent); color:#fff; border-radius:4px; cursor:pointer; }
+  button.secondary { background:#fff; color:var(--accent); }
+  input[type=file] { display:none; }
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline:3px solid #8ab9dd; outline-offset:1px; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; align-items:center; }
+  .table-wrap { overflow-x:auto; }
+  table { width:100%; min-width:1180px; border-collapse:collapse; background:#fff; margin-top:8px; }
+  th, td { border:1px solid var(--line); padding:4px 6px; text-align:left; vertical-align:top; }
+  td input, td select, td textarea { width:100%; font:inherit; font-size:.9rem; border:1px solid transparent; padding:4px; background:transparent; }
+  td input:hover, td input:focus, td select:hover, td select:focus, td textarea:hover, td textarea:focus { border-color:var(--line); background:#fff; }
+  tr.needs-review td { background:var(--warn); }
+  .note { color:var(--muted); font-size:.9rem; }
+  #count { font-weight:bold; }
+  .check { font-size:.85rem; color:#7a4b00; }
+  .privacy { margin-top:28px; padding-top:12px; border-top:1px solid var(--line); }
+</style>
+</head>
+<body>
+<main>
+  <h1>SyllaBuddy</h1>
+  <p class="sub">Paste or upload your classes. AI builds one schedule from that input: type, date, due time, and the source line. You review every row.</p>
+
+  <div class="grid">
+    <div>
+      <label for="course">Course name</label>
+      <input id="course" type="text" placeholder="e.g. MOT 6115">
+    </div>
+    <div>
+      <label for="defaultTime">Default due time for this course</label>
+      <input id="defaultTime" type="time">
+    </div>
+    <div>
+      <label for="origin">This text comes from</label>
+      <select id="origin">
+        <option>Syllabus</option>
+        <option>Canvas</option>
+        <option>Email</option>
+        <option>Other</option>
+      </select>
+    </div>
+  </div>
+  <p class="note">Default due time: for example 23:59 if this course closes at 11:59 PM. Items with no time of their own get it. Readings stay blank unless the syllabus gives a reading cutoff.</p>
+
+  <label for="syllabus">Paste syllabus text</label>
+  <textarea id="syllabus" placeholder="Paste the schedule, assignments, or readings section"></textarea>
+
+  <div class="row">
+    <button id="extract">Build schedule with AI</button>
+    <button id="rules" class="secondary" type="button">Use the rule-based extractor instead</button>
+    <button id="applyDefault" class="secondary">Apply default time to empty times</button>
+    <button id="sort" class="secondary">Sort by date and time</button>
+    <button id="sortType" class="secondary">Sort by type</button>
+    <button id="add" class="secondary">Add item by hand</button>
+    <button id="ics" class="secondary">Download calendar (.ics)</button>
+    <button id="csv" class="secondary">Download CSV</button>
+    <button id="clear" class="secondary">Clear list</button>
+    <button id="uploadFolder" class="secondary" type="button">Upload a folder</button>
+    <input id="folder" type="file" webkitdirectory multiple>
+  </div>
+  <ul id="folderList" class="note"></ul>
+  <div class="row">
+    <label for="reminder">Calendar reminder</label>
+    <select id="reminder" style="width:auto">
+      <option value="">None</option>
+      <option value="day">1 day before</option>
+      <option value="hour">1 hour before</option>
+      <option value="both">1 day and 1 hour before</option>
+    </select>
+    <p class="note">Timed items become events that end at the due time. Rows with no valid date are left out of the calendar.</p>
+  </div>
+  <p id="status" class="note" role="status"></p>
+  <p id="count" role="status"></p>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Course</th>
+          <th>Type</th>
+          <th>Item</th>
+          <th>Date</th>
+          <th>Time</th>
+          <th>Origin</th>
+          <th>Source text</th>
+          <th>Details</th>
+          <th>Link</th>
+          <th>Check</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+  <p class="note">Highlighted rows need review: missing date, missing time, a weekday that does not match the date, or a time that may be a class meeting. Check every row against the pasted syllabus. Exam and quiz stay separate from assignment because they weigh more on the grade.</p>
+
+  <p class="privacy note">Privacy: paste only text you are allowed to use. The syllabus is sent to the server so AI can extract items. The API key stays on the server. This page does not require an account. Nothing is saved on the server; your list is stored only in this browser.</p>
+</main>
+
+<script src="/rules-extractor.js"></script>
+<script>
+const STORAGE_KEY = "syllabuddy-saved-rows";
+const rows = document.getElementById("rows");
+const status = document.getElementById("status");
+const countEl = document.getElementById("count");
+const LABELS = ["Course", "Type", "Item", "Date", "Time", "Origin", "Source text", "Details", "Link"];
+const ORIGINS = ["Syllabus", "Canvas", "Email", "Other"];
+const TYPES = ["Class", "Assignment", "Exam", "Quiz", "Project", "Reading"];
+const val = (tr, i) => tr.querySelectorAll("td")[i].querySelector("input,select,textarea").value;
+const WD = { sun: 0, mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6 };
+
+function weekdayMismatch(date, text) {
+  if (!date) return "";
+  const m = String(text || "").match(/\b(monday|mon|tuesday|tues|tue|wednesday|wed|thursday|thurs|thur|thu|friday|fri|saturday|sat|sunday|sun)\b/i);
+  if (!m) return "";
+  const parts = date.split("-");
+  const d = new Date(+parts[0], +parts[1] - 1, +parts[2]);
+  if (d.getDay() !== WD[m[1].slice(0, 3).toLowerCase()]) return "weekday does not match date";
+  return "";
+}
+
+function refresh(tr) {
+  const issues = [];
+  if (tr.dataset.flag) issues.push(tr.dataset.flag);
+  if (!val(tr, 3) && val(tr, 1) !== "Class") issues.push(tr.dataset.dflag || "no date");
+  else {
+    const mismatch = weekdayMismatch(val(tr, 3), val(tr, 2) + " " + val(tr, 6));
+    if (mismatch) issues.push(mismatch);
+  }
+  if (!val(tr, 4) && val(tr, 1) !== "Reading" && val(tr, 1) !== "Class") issues.push("no time");
+  const unique = [...new Set(issues.filter(Boolean))];
+  tr.className = unique.length ? "needs-review" : "";
+  tr.querySelector(".check").textContent = unique.join(", ");
+  return unique.length > 0;
+}
+
+function refreshAll() {
+  const trs = [...rows.querySelectorAll("tr")];
+  const n = trs.filter(refresh).length;
+  countEl.textContent = trs.length ? n + " of " + trs.length + " item(s) need review" : "";
+  saveRows();
+}
+
+function addRow(r) {
+  const tr = document.createElement("tr");
+  tr.dataset.flag = r.flag || "";
+  tr.dataset.dflag = r.dflag || "";
+  const vals = [r.course, r.type, r.item, r.due, r.time, r.origin, r.source, r.details, r.link];
+  vals.forEach((v, i) => {
+    const td = document.createElement("td");
+    let el;
+    if (i === 1) {
+      el = document.createElement("select");
+      TYPES.forEach((typeName) => {
+        const op = document.createElement("option");
+        op.textContent = typeName;
+        el.appendChild(op);
+      });
+      el.value = TYPES.includes(v) ? v : "Assignment";
+    } else if (i === 5) {
+      el = document.createElement("select");
+      ORIGINS.forEach((o) => {
+        const op = document.createElement("option");
+        op.textContent = o;
+        el.appendChild(op);
+      });
+      el.value = ORIGINS.includes(v) ? v : "Other";
+    } else if (i === 6 || i === 7) {
+      el = document.createElement("textarea");
+      el.rows = 2;
+      el.value = v || "";
+    } else {
+      el = document.createElement("input");
+      if (i === 3) el.type = "date";
+      if (i === 4) el.type = "time";
+      if (i === 8) el.type = "url";
+      el.value = v || "";
+    }
+    el.setAttribute("aria-label", LABELS[i]);
+    el.addEventListener("input", refreshAll);
+    td.appendChild(el);
+    tr.appendChild(td);
+  });
+  const chk = document.createElement("td");
+  const sp = document.createElement("span");
+  sp.className = "check";
+  chk.appendChild(sp);
+  tr.appendChild(chk);
+  const td = document.createElement("td");
+  const del = document.createElement("button");
+  del.className = "secondary";
+  del.textContent = "Delete";
+  del.addEventListener("click", () => { tr.remove(); refreshAll(); });
+  td.appendChild(del);
+  tr.appendChild(td);
+  rows.appendChild(tr);
+}
+
+function rowData(tr) {
+  return {
+    course: val(tr, 0),
+    type: val(tr, 1),
+    item: val(tr, 2),
+    due: val(tr, 3),
+    date: val(tr, 3),
+    time: val(tr, 4),
+    origin: val(tr, 5),
+    source: val(tr, 6),
+    details: val(tr, 7),
+    link: val(tr, 8),
+    flag: tr.dataset.flag || "",
+    dflag: tr.dataset.dflag || "",
+  };
+}
+
+function saveRows() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify({
+    course: document.getElementById("course").value,
+    defaultTime: document.getElementById("defaultTime").value,
+    origin: document.getElementById("origin").value,
+    reminder: document.getElementById("reminder").value,
+    rows: [...rows.querySelectorAll("tr")].map(rowData),
+  }));
+}
+
+function loadRows() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+    if (!saved) return;
+    document.getElementById("course").value = saved.course || "";
+    document.getElementById("defaultTime").value = saved.defaultTime || "";
+    document.getElementById("origin").value = saved.origin || "Syllabus";
+    document.getElementById("reminder").value = saved.reminder || "";
+    (saved.rows || []).forEach(addRow);
+    refreshAll();
+  } catch (error) {
+    console.error(error);
+  }
+}
+
+let sortState = { col: 3, dir: 1 };
+const SORTABLE = 6;
+const dateTime = (tr) => (val(tr, 3) || "9999-99-99") + " " + (val(tr, 4) || "99:99");
+
+function markHeaders() {
+  document.querySelectorAll("thead th").forEach((th, i) => {
+    if (i >= SORTABLE) return;
+    const on = sortState.col === i;
+    th.textContent = th.dataset.label + (on ? (sortState.dir > 0 ? " \u25B2" : " \u25BC") : "");
+    th.setAttribute("aria-sort", on ? (sortState.dir > 0 ? "ascending" : "descending") : "none");
+  });
+}
+
+function sortRows(col, dir) {
+  sortState = { col: col === undefined ? 3 : col, dir: dir || 1 };
+  [...rows.querySelectorAll("tr")].sort((a, b) => {
+    const va = val(a, sortState.col).toLowerCase();
+    const vb = val(b, sortState.col).toLowerCase();
+    if (va !== vb) {
+      if (!va) return 1;
+      if (!vb) return -1;
+      return (va < vb ? -1 : 1) * sortState.dir;
+    }
+    const da = dateTime(a);
+    const db = dateTime(b);
+    return da < db ? -1 : da > db ? 1 : 0;
+  }).forEach((tr) => rows.appendChild(tr));
+  markHeaders();
+  saveRows();
+}
+
+const p2 = (n) => String(n).padStart(2, "0");
+function icsEscape(t) {
+  return String(t).replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r?\n/g, "\\n");
+}
+function fold(line) {
+  const out = [];
+  let t = line;
+  while (t.length > 73) { out.push(t.slice(0, 73)); t = " " + t.slice(73); }
+  out.push(t);
+  return out.join("\r\n");
+}
+const fmtLocal = (d) => d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate()) + "T" + p2(d.getHours()) + p2(d.getMinutes()) + "00";
+const fmtDate = (d) => d.getFullYear() + p2(d.getMonth() + 1) + p2(d.getDate());
+function buildICS(list, reminder, now) {
+  now = now || new Date();
+  const stamp = now.getUTCFullYear() + p2(now.getUTCMonth() + 1) + p2(now.getUTCDate()) + "T" + p2(now.getUTCHours()) + p2(now.getUTCMinutes()) + p2(now.getUTCSeconds()) + "Z";
+  const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//SyllaBuddy//Syllabus deadlines//EN", "CALSCALE:GREGORIAN"];
+  const offsets = reminder === "day" ? ["-P1D"] : reminder === "hour" ? ["-PT1H"] : reminder === "both" ? ["-P1D", "-PT1H"] : [];
+  let count = 0, skipped = 0;
+  list.forEach((r, i) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(r.date || "");
+    if (!m || !r.item) { skipped++; return; }
+    const y = +m[1], mo = +m[2] - 1, d = +m[3], day = new Date(y, mo, d);
+    if (day.getMonth() !== mo) { skipped++; return; }
+    const tm = /^(\d{2}):(\d{2})$/.exec(r.time || "");
+    lines.push("BEGIN:VEVENT", "UID:syllabuddy-" + stamp + "-" + i + "@local", "DTSTAMP:" + stamp);
+    if (tm) {
+      const due = new Date(y, mo, d, +tm[1], +tm[2]);
+      const start = new Date(due.getTime() - 30 * 60000);
+      lines.push("DTSTART:" + fmtLocal(start), "DTEND:" + fmtLocal(due));
+    } else {
+      lines.push("DTSTART;VALUE=DATE:" + fmtDate(day), "DTEND;VALUE=DATE:" + fmtDate(new Date(y, mo, d + 1)));
+    }
+    lines.push(fold("SUMMARY:" + icsEscape((r.course ? r.course + ": " : "") + r.item)));
+    const link = /^https?:\/\/\S+$/i.test(r.link || "") ? r.link : "";
+    const desc = "Type: " + (r.type || "") + (tm ? ". Due at " + r.time : "") + (r.source ? ". Source: " + r.source : "") +
+      (r.details ? "\n\n" + String(r.details).slice(0, 2000) : "") + (link ? "\n\nLink: " + link : "");
+    lines.push(fold("DESCRIPTION:" + icsEscape(desc)));
+    if (link) lines.push(fold("URL:" + link));
+    offsets.forEach((o) => {
+      if (!tm && o !== "-P1D") return;
+      lines.push("BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:" + icsEscape(r.item), (tm ? "TRIGGER;RELATED=END:" : "TRIGGER:") + o, "END:VALARM");
+    });
+    lines.push("END:VEVENT");
+    count++;
+  });
+  lines.push("END:VCALENDAR");
+  return { text: lines.join("\r\n") + "\r\n", count, skipped };
+}
+
+document.querySelectorAll("thead th").forEach((th, i) => {
+  if (i >= SORTABLE) return;
+  th.dataset.label = th.textContent;
+  th.tabIndex = 0;
+  th.style.cursor = "pointer";
+  const go = () => sortRows(i, sortState.col === i ? -sortState.dir : 1);
+  th.addEventListener("click", go);
+  th.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); }
+  });
+});
+markHeaders();
+loadRows();
+
+["course", "defaultTime", "origin", "reminder"].forEach((id) => {
+  document.getElementById(id).addEventListener("input", saveRows);
+  document.getElementById(id).addEventListener("change", saveRows);
+});
+
+const folderInput = document.getElementById("folder");
+const folderList = document.getElementById("folderList");
+
+function listFolder() {
+  folderList.innerHTML = "";
+  [...folderInput.files].forEach((file) => {
+    const li = document.createElement("li");
+    li.textContent = file.webkitRelativePath || file.name;
+    folderList.appendChild(li);
+  });
+  if (folderInput.files.length) {
+    status.textContent = "Loaded " + folderInput.files.length + " file(s) from the folder. Click Build schedule with AI to turn them into a schedule.";
+  }
+}
+
+document.getElementById("uploadFolder").addEventListener("click", () => folderInput.click());
+folderInput.addEventListener("change", listFolder);
+
+function toHHMM(hour, minute, period, otherPeriod) {
+  let h = Number(hour);
+  const m = minute ? Number(minute) : 0;
+  let p = (period || otherPeriod || "").toLowerCase().replace(/\./g, "");
+  if (p.startsWith("p") && h !== 12) h += 12;
+  if (p.startsWith("a") && h === 12) h = 0;
+  if (h > 23 || m > 59) return "";
+  return String(h).padStart(2, "0") + ":" + String(m).padStart(2, "0");
+}
+
+function titleCaseName(name) {
+  return name.replace(/\s+/g, " ").trim().replace(/\b([a-z])/g, (ch) => ch.toUpperCase());
+}
+
+function parseCasualSchedule(text) {
+  const range = /^(.*?)\s+(?:(?:at|from)\s+)?(\d{1,2})(?::(\d{2}))?\s*([ap]\.?m\.?)?\s*(?:t[o0]|to|-|–|—)\s*(\d{1,2})(?::(\d{2}))?\s*([ap]\.?m\.?)?\s*$/i;
+  const items = [];
+  const lines = String(text || "").split(/\r?\n|;/).map((line) => line.trim()).filter(Boolean);
+  lines.forEach((line) => {
+    const m = line.match(range);
+    if (!m) return;
+    const name = titleCaseName(m[1].replace(/^(class|course)\s+/i, ""));
+    if (!name) return;
+    const startPeriod = m[4] || m[7] || "";
+    const endPeriod = m[7] || m[4] || "";
+    const start = toHHMM(m[2], m[3], m[4], startPeriod);
+    const end = toHHMM(m[5], m[6], m[7], endPeriod);
+    if (!start) return;
+    items.push({
+      type: "Class",
+      item: name,
+      due: "",
+      time: start,
+      source: line,
+      details: end ? "Until " + end : "",
+      link: "",
+      flag: "",
+      dflag: "",
+    });
+  });
+  return items;
+}
+
+function scheduleFromText(text, defaultTime, year) {
+  let items = [];
+  if (typeof extractItems === "function") {
+    try { items = extractItems(text, year || new Date().getFullYear(), defaultTime) || []; }
+    catch (error) { console.error(error); }
+  }
+  const casual = parseCasualSchedule(text);
+  const seen = new Set(items.map((item) => (item.item || "").toLowerCase()));
+  casual.forEach((item) => {
+    if (!seen.has(item.item.toLowerCase())) items.push(item);
+  });
+  return items;
+}
+
+function fillTableFromItems(items, course, origin, defaultTime) {
+  rows.innerHTML = "";
+  items.forEach((item) => {
+    let time = item.time || "";
+    if (!time && item.type !== "Reading" && item.type !== "Class" && defaultTime) time = defaultTime;
+    addRow({
+      course: course,
+      type: TYPES.includes(item.type) ? item.type : "Assignment",
+      item: item.item,
+      due: item.due,
+      time: time,
+      origin: origin,
+      source: item.source,
+      details: item.details || "",
+      link: item.link || "",
+      flag: item.flag || "",
+      dflag: item.dflag || (item.due ? "" : "no date"),
+    });
+  });
+  sortRows();
+  refreshAll();
+}
+
+document.getElementById("rules").addEventListener("click", () => {
+  const syllabus = document.getElementById("syllabus").value;
+  if (!syllabus.trim()) {
+    status.textContent = "Paste a syllabus first.";
+    return;
+  }
+  if (typeof extractItems !== "function") {
+    status.textContent = "The rule-based extractor did not load. Refresh the page.";
+    return;
+  }
+  const course = document.getElementById("course").value.trim();
+  const origin = document.getElementById("origin").value;
+  const defaultTime = document.getElementById("defaultTime").value;
+  const items = scheduleFromText(syllabus, defaultTime, new Date().getFullYear());
+  if (!items.length) {
+    rows.innerHTML = "";
+    refreshAll();
+    status.textContent = "Nothing in that text could be turned into a schedule. Try Build schedule with AI, or add items by hand.";
+    return;
+  }
+  fillTableFromItems(items, course, origin, defaultTime);
+  status.textContent = "Built a schedule with " + items.length + " item(s) from your input.";
+});
+
+document.getElementById("extract").addEventListener("click", async () => {
+  const course = document.getElementById("course").value.trim();
+  const origin = document.getElementById("origin").value;
+  const syllabus = document.getElementById("syllabus").value;
+  const defaultTime = document.getElementById("defaultTime").value;
+  const files = [...folderInput.files];
+  if (!syllabus.trim() && files.length === 0) {
+    status.textContent = "Paste a syllabus or upload a folder first.";
+    return;
+  }
+  const button = document.getElementById("extract");
+  button.disabled = true;
+  status.textContent = "AI is building your schedule...";
+  try {
+    const body = new FormData();
+    body.append("course", course);
+    body.append("origin", origin);
+    body.append("syllabus", syllabus);
+    body.append("defaultTime", defaultTime);
+    files.forEach((file) => body.append("files", file, file.name));
+    const response = await fetch("/extract", { method: "POST", body });
+    const responseText = await response.text();
+    let data;
+    try { data = JSON.parse(responseText); }
+    catch (error) { throw new Error("Server returned: " + responseText); }
+    if (!response.ok) throw new Error(data.error || "Something went wrong.");
+    let items = data.items || [];
+    if (!items.length) items = scheduleFromText(syllabus, defaultTime, new Date().getFullYear());
+    if (!items.length) {
+      rows.innerHTML = "";
+      refreshAll();
+      status.textContent = "Could not build a schedule from that input. Try the rule-based extractor, or add rows by hand.";
+      return;
+    }
+    fillTableFromItems(items, course, origin, defaultTime);
+    status.textContent = "AI built a schedule with " + items.length + " item(s). Check every row before you export.";
+  } catch (error) {
+    console.error(error);
+    const fallback = scheduleFromText(syllabus, defaultTime, new Date().getFullYear());
+    if (fallback.length) {
+      fillTableFromItems(fallback, course, origin, defaultTime);
+      status.textContent = "AI was unavailable, so the schedule was built from your typed classes instead (" + fallback.length + " item(s)).";
+    } else {
+      status.textContent = "AI could not build the schedule: " + error.message + " You can use the rule-based extractor instead.";
+    }
+  } finally {
+    button.disabled = false;
+  }
+});
+
+document.getElementById("applyDefault").addEventListener("click", () => {
+  const dt = document.getElementById("defaultTime").value;
+  const course = document.getElementById("course").value.trim();
+  if (!dt) { status.textContent = "Set a default due time first."; return; }
+  let n = 0;
+  rows.querySelectorAll("tr").forEach((tr) => {
+    if (!val(tr, 4) && val(tr, 1) !== "Reading" && val(tr, 1) !== "Class" && val(tr, 0) === course) {
+      tr.querySelectorAll("td")[4].querySelector("input").value = dt;
+      n++;
+    }
+  });
+  refreshAll();
+  status.textContent = "Applied the default time to " + n + " row(s).";
+});
+
+document.getElementById("sort").addEventListener("click", () => sortRows(3, 1));
+document.getElementById("sortType").addEventListener("click", () => sortRows(1, 1));
+document.getElementById("add").addEventListener("click", () => {
+  addRow({
+    course: document.getElementById("course").value.trim(),
+    type: "Assignment",
+    item: "",
+    due: "",
+    time: document.getElementById("defaultTime").value,
+    origin: document.getElementById("origin").value,
+    source: "added by hand",
+    details: "",
+    link: "",
+    dflag: "no date",
+  });
+  refreshAll();
+});
+document.getElementById("clear").addEventListener("click", () => {
+  rows.innerHTML = "";
+  status.textContent = "";
+  countEl.textContent = "";
+  saveRows();
+});
+document.getElementById("ics").addEventListener("click", () => {
+  const data = [...rows.querySelectorAll("tr")].map(rowData);
+  if (!data.length) { status.textContent = "Nothing to export yet."; return; }
+  const res = buildICS(data, document.getElementById("reminder").value);
+  if (!res.count) { status.textContent = "No rows with a valid date to export."; return; }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([res.text], { type: "text/calendar" }));
+  a.download = "syllabuddy-calendar.ics";
+  a.click();
+  status.textContent = "Exported " + res.count + " calendar item(s)" + (res.skipped ? "; " + res.skipped + " row(s) with no valid date were left out." : ".") + " Check each row before relying on it.";
+});
+document.getElementById("csv").addEventListener("click", () => {
+  const lines = [LABELS];
+  rows.querySelectorAll("tr").forEach((tr) => lines.push(LABELS.map((_, i) => val(tr, i))));
+  const csv = lines.map((r) => r.map((v) => '"' + String(v).replace(/"/g, '""') + '"').join(",")).join("\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+  a.download = "syllabuddy-items.csv";
+  a.click();
+});
+</script>
+</body>
+</html>
