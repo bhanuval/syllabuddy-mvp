@@ -59,7 +59,10 @@ Rules:
 - For Class rows, time is the start time as HH:MM. Put the end time in details (example: "Until 17:00").
 - Midterm, final, and "test" are Exam. "Quiz" is Quiz. Do not label an exam or quiz as Assignment.
 - item is a short title. Do not invent titles.
-- due must be YYYY-MM-DD when the text gives a real calendar date. Class meetings often have no date; then due is "".
+- due must be YYYY-MM-DD when the text gives a real calendar date.
+- A class meeting takes the date shown with its session (for example "Saturday, 12-Sep." becomes that date). Leave a class meeting's due empty only if the text gives no date.
+- A reading listed under a class session takes that session's class date as due. A reading never takes a date from its citation.
+- An assignment listed under a class session does NOT take the session's class date. Give an assignment a due date only when the text states one for that assignment, for example in a table of deliverables. Otherwise leave its due empty.
 - If month and day are given but year is not, use the year from Today's date. If that date is invalid (for example February 30), set due to "".
 - For assignments, quizzes, exams, and projects, time must be a due time, not a lecture meeting time.
 - If the student provided a default due time, you may copy it onto dated Assignment/Quiz/Exam/Project rows with no time. Do not apply it to Class or Reading.
@@ -269,6 +272,33 @@ def find_source_line(name, syllabus):
     return text[:180]
 
 
+def drop_session_dates(items):
+    """Readings only keep a date that matches a class meeting date. An assignment dated with a class date is dropped
+    when a similar assignment has a different date, because the outline's session date is not a due date."""
+    class_dates = {i["due"] for i in items if i["type"] == "Class" and i["due"]}
+    out = [dict(i) for i in items]
+    for i in out:
+        if i["type"] == "Reading" and i["due"] and class_dates and i["due"] not in class_dates:
+            i["due"] = ""
+            i["flag"] = "; ".join(x for x in (i["flag"], "date removed: not a class date") if x)
+    plain = [k for k, i in enumerate(out) if i["type"] not in ("Reading", "Class") and i["due"]]
+    drop = set()
+    for k in plain:
+        if out[k]["due"] not in class_dates:
+            continue
+        tk = title_tokens(out[k]["item"])
+        for j in plain:
+            if j == k or out[j]["due"] in class_dates or numbers_conflict(out[k]["item"], out[j]["item"]):
+                continue
+            tj = title_tokens(out[j]["item"])
+            common = token_overlap(tk, tj)
+            union = len(tk) + len(tj) - common
+            if common >= 2 and union and common / union >= 0.5:
+                drop.add(k)
+                break
+    return [i for k, i in enumerate(out) if k not in drop]
+
+
 def merge_duplicates(items):
     """The same assignment often appears twice: in a deliverables table (with a date) and in a session outline (without).
     Near-identical titles are merged into the dated row. Looser matches are flagged, not deleted, so the student decides."""
@@ -285,6 +315,8 @@ def merge_duplicates(items):
             if d in used_dated:
                 continue
             td = title_tokens(keep[d]["item"])
+            if numbers_conflict(keep[u]["item"], keep[d]["item"]):
+                continue
             common = token_overlap(tu, td)
             diff = (len(tu) - common) + (len(td) - common)
             if common >= 2 and diff <= 1 and (best is None or (diff, -common) < best[0]):
@@ -304,6 +336,8 @@ def merge_duplicates(items):
             if d in used_dated:
                 continue
             td = title_tokens(keep[d]["item"])
+            if numbers_conflict(keep[u]["item"], keep[d]["item"]):
+                continue
             common = token_overlap(tu, td)
             union = len(tu) + len(td) - common
             score = common / union if union else 0
@@ -313,6 +347,33 @@ def merge_duplicates(items):
             note = "possible duplicate of: " + keep[best[1]]["item"][:60]
             keep[u]["flag"] = "; ".join(x for x in (keep[u]["flag"], note) if x)
     return [i for k, i in enumerate(keep) if k not in removed]
+
+
+MONTH_NUMBER = {m: n for n, m in enumerate("jan feb mar apr may jun jul aug sep oct nov dec".split(), 1)}
+MONTH_NAMES = "(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*"
+
+
+def date_from_text(text, year):
+    """Finds a day and month such as '12-Sep.' or 'October 9' in text. Returns YYYY-MM-DD, or '' if absent or impossible."""
+    t = text or ""
+    m = re.search(r"\b(\d{1,2})(?:st|nd|rd|th)?[-\s]+" + MONTH_NAMES + r"\b", t, re.I)
+    if m:
+        day, mon = int(m.group(1)), MONTH_NUMBER[m.group(2).lower()]
+    else:
+        m = re.search(r"\b" + MONTH_NAMES + r"\.?\s+(\d{1,2})\b(?!:)", t, re.I)
+        if not m:
+            return ""
+        mon, day = MONTH_NUMBER[m.group(1).lower()], int(m.group(2))
+    try:
+        return datetime(year, mon, day).strftime("%Y-%m-%d")
+    except ValueError:
+        return ""
+
+
+def numbers_conflict(a, b):
+    """'Case Study 1' and 'Case Study 2' are different items. A missing number is not a conflict."""
+    na, nb = set(re.findall(r"\d+", a or "")), set(re.findall(r"\d+", b or ""))
+    return bool(na) and bool(nb) and na != nb
 
 
 def appears_in(snippet, syllabus):
@@ -334,6 +395,8 @@ def clean_items(raw_items, syllabus=""):
             item_type = "Assignment"
         due = valid_due_date(raw.get("due"))
         source = str(raw.get("source") or "").strip()
+        if not due and item_type == "Class":
+            due = date_from_text(source, datetime.now().year)
         details = str(raw.get("details") or "").strip()
         link = str(raw.get("link") or "").strip()
         flags = []
@@ -545,7 +608,7 @@ def extract_items(syllabus, course, notes, images, default_time=""):
         parsed = json.loads(raw_text)
     except json.JSONDecodeError as error:
         raise RuntimeError("The AI did not return valid JSON.") from error
-    return merge_duplicates(clean_items(parsed.get("items"), syllabus))
+    return merge_duplicates(drop_session_dates(clean_items(parsed.get("items"), syllabus)))
 
 
 def request_payload():

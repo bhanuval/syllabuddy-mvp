@@ -509,7 +509,7 @@ if (typeof document !== "undefined") {
     rows.querySelectorAll("tr").forEach(tr => lines.push(LABELS.map((_, i) => val(tr, i))));
     const csv = lines.map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(",")).join("\n");
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv" }));
+    a.href = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }));
     a.download = "syllabuddy-items.csv"; a.click();
   });
 }

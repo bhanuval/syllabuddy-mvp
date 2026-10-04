@@ -61,6 +61,35 @@ assert cl[0]["source"] == "Bus. Analy. using Orange (2): Decision Trees | Sunday
 cl = Server.clean_items([row("Assignment", "Totally unrelated", "2026-10-04", "7")], text)
 assert cl[0]["source"] == "" and "no source line found" in cl[0]["flag"]
 
+# The retest pattern: session dates on assignments, class rows with no date, citation dates on readings
+def r2(kind, name, due, source="x"):
+    return {"type": kind, "item": name, "due": due, "time": "", "source": source, "details": "", "link": "", "flag": ""}
+raw = [
+    r2("Assignment", "Business Analytics using Orange: Neural Networks", "2026-10-10", "Saturday, 10-Oct."),
+    r2("Assignment", "Bus. Analy. using Orange (4): Neural Networks", "2026-11-01", "Sunday, Nov. 1"),
+    r2("Assignment", "Building AI Agents with n8n", "2026-10-30", "Friday, 30-Oct."),
+    r2("Assignment", "Building a Customer Service Agent with n8n", "2026-11-15", "Sunday, Nov. 15"),
+    r2("Assignment", "Case Study 1", "2026-10-10", "x"),
+    r2("Assignment", "Case Study 2", "2026-11-20", "x"),
+    r2("Class", "Business Analytics & Machine Learning", "", "Saturday, 12-Sep. 1:30PM - 5:30PM"),
+    r2("Class", "Deep Learning to Generative AI", "", "Saturday, 10-Oct. 1:30PM - 5:30PM"),
+    r2("Class", "Agentic Operating Model I", "", "Friday, 30-Oct. 5:30PM - 9:30PM"),
+    r2("Reading", "How to Design Agentic Systems", "2026-06-19", "Sudhir, K. (2026, June 19)"),
+    r2("Reading", "Researchers Asked LLMs", "2026-09-12", "Saturday, 12-Sep."),
+]
+fixed = Server.merge_duplicates(Server.drop_session_dates(Server.clean_items(raw, "x")))
+by = {(i["type"], i["item"]): i for i in fixed}
+assert ("Assignment", "Business Analytics using Orange: Neural Networks") not in by       # session date dropped
+assert by[("Assignment", "Bus. Analy. using Orange (4): Neural Networks")]["due"] == "2026-11-01"
+assert ("Assignment", "Building AI Agents with n8n") not in by
+assert by[("Assignment", "Building a Customer Service Agent with n8n")]["due"] == "2026-11-15"
+assert ("Assignment", "Case Study 1") in by and ("Assignment", "Case Study 2") in by        # numbers keep them apart
+assert by[("Class", "Business Analytics & Machine Learning")]["due"] == "2026-09-12"          # class date filled
+assert by[("Reading", "How to Design Agentic Systems")]["due"] == ""                          # citation date removed
+assert by[("Reading", "Researchers Asked LLMs")]["due"] == "2026-09-12"                       # class date kept
+assert Server.date_from_text("Friday 4 September", 2026) == "2026-09-04"
+assert Server.date_from_text("Sunday, Feb. 30", 2026) == ""
+
 from docx import Document
 d = Document(); d.add_paragraph("Quiz 1 due Oct 12 at 6 PM"); b = io.BytesIO(); d.save(b); b.seek(0)
 r = c.post("/extract", data={"files": (b, "syl.docx")}, content_type="multipart/form-data")
