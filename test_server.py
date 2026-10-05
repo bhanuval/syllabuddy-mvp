@@ -108,6 +108,24 @@ syl = "1\nBus. Analy. using Orange (1): Introduction\nSunday, Sept. 20\n"
 fill = Server.clean_items([r3("Assignment", "Business Analytics using Orange: Introduction", "", "1")], syl)[0]
 assert fill["due"] == str(Server.datetime.now().year) + "-09-20" and "date taken from the source line" in fill["flag"], fill
 
+# A PDF with no text (a scan) gets a plain explanation; a very long PDF is read only up to the page cap
+try:
+    from reportlab.pdfgen import canvas as _canvas
+    from PIL import Image as _Image
+except ImportError:
+    _canvas = None
+if _canvas:
+    _img = _Image.new("RGB", (300, 100), "white"); _b = io.BytesIO(); _img.save(_b, "PDF"); _b.seek(0)
+    Server.extract_items = fake
+    r = c.post("/extract", data={"files": (_b, "scan.pdf")}, content_type="multipart/form-data")
+    assert r.status_code == 400 and "no readable text" in r.get_json()["error"], r.get_json()
+    _b = io.BytesIO(); _cv = _canvas.Canvas(_b)
+    for _n in range(1, 81):
+        _cv.drawString(72, 750, "PAGEMARK%d" % _n); _cv.showPage()
+    _cv.save()
+    _text = Server.extract_pdf(_b.getvalue())
+    assert "PAGEMARK1" in _text and "PAGEMARK60" in _text and "PAGEMARK70" not in _text
+
 from docx import Document
 d = Document(); d.add_paragraph("Quiz 1 due Oct 12 at 6 PM"); b = io.BytesIO(); d.save(b); b.seek(0)
 r = c.post("/extract", data={"files": (b, "syl.docx")}, content_type="multipart/form-data")

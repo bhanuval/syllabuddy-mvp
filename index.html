@@ -33,15 +33,39 @@
   .note { color:var(--muted); font-size:.9rem; }
   #count { font-weight:bold; }
   .check { font-size:.85rem; color:#7a4b00; }
+  .step { background:#fff; border:1px solid var(--line); border-radius:8px; padding:16px; margin-bottom:16px; }
+  .step h2 { font-size:1.15rem; margin:0 0 8px; }
+  .num { display:inline-flex; align-items:center; justify-content:center; width:1.6em; height:1.6em; border-radius:50%; background:var(--accent); color:#fff; font-size:.85rem; margin-right:8px; }
+  .step.dragging { border-color:var(--accent); background:#eef5fb; outline:2px dashed var(--accent); }
+  .step[hidden] { display:none; }
+  button.linkish { background:none; border:none; color:var(--accent); text-decoration:underline; padding:8px 4px; }
+  .filelist { list-style:none; padding:0; margin:8px 0; }
+  .filelist li { display:flex; gap:8px; align-items:center; }
+  .filelist button { padding:0 8px; background:#fff; color:var(--accent); }
+  details.options { margin-top:12px; }
+  details.options summary { cursor:pointer; color:var(--accent); }
+  #extract { font-size:1.05rem; padding:10px 20px; }
   .privacy { margin-top:28px; padding-top:12px; border-top:1px solid var(--line); }
 </style>
 </head>
 <body>
 <main>
   <h1>SyllaBuddy</h1>
-  <p class="sub">Paste or upload your classes. AI builds one schedule from that input: type, date, due time, and the source line. You review every row.</p>
+  <p class="sub">Turn a syllabus into one reviewed schedule you can export to your calendar. You check every row.</p>
 
-  <div class="grid">
+  <section class="step" id="step1">
+    <h2><span class="num">1</span>Add your syllabus</h2>
+    <p class="note">Drop files here, or click Upload files. You can add several: PDF, Word, Excel, PowerPoint, or screenshots. A screenshot works well when a PDF will not.</p>
+    <div class="row">
+      <button id="uploadFiles" class="secondary" type="button">Upload files</button>
+      <input id="files" type="file" multiple accept=".pdf,.docx,.xlsx,.xlsm,.pptx,.txt,.md,.csv,.tsv,.rtf,.png,.jpg,.jpeg,.gif,.webp" style="display:none">
+    </div>
+    <ul id="folderList" class="note filelist"></ul>
+    <label for="syllabus">Or paste syllabus text</label>
+    <textarea id="syllabus" placeholder="Paste the schedule, assignments, or readings section"></textarea>
+    <details class="options">
+      <summary>Optional: course name and default due time</summary>
+      <div class="grid">
     <div>
       <label for="course">Course name</label>
       <input id="course" type="text" placeholder="e.g. MOT 6115">
@@ -60,39 +84,25 @@
       </select>
     </div>
   </div>
-  <p class="note">Default due time: for example 23:59 if this course closes at 11:59 PM. Items with no time of their own get it. Readings stay blank unless the syllabus gives a reading cutoff.</p>
+  
+      <p class="note">Default due time: for example 23:59 if this course closes at 11:59 PM. Items with no time of their own get it. Readings stay blank unless the syllabus gives a reading cutoff.</p>
+    </details>
+  </section>
 
-  <label for="syllabus">Paste syllabus text</label>
-  <textarea id="syllabus" placeholder="Paste the schedule, assignments, or readings section"></textarea>
+  <section class="step">
+    <h2><span class="num">2</span>Build your schedule</h2>
+    <div class="row">
+      <button id="extract" class="primary">Build schedule with AI</button>
+      <button id="rules" class="linkish" type="button">Or use the simpler rule-based extractor</button>
+    </div>
+    <p id="status" class="note" role="status"></p>
+    <p id="count" role="status"></p>
+  </section>
 
-  <div class="row">
-    <button id="extract">Build schedule with AI</button>
-    <button id="rules" class="secondary" type="button">Use the rule-based extractor instead</button>
-    <button id="applyDefault" class="secondary">Apply default time to empty times</button>
-    <button id="sort" class="secondary">Sort by date and time</button>
-    <button id="sortType" class="secondary">Sort by type</button>
-    <button id="add" class="secondary">Add item by hand</button>
-    <button id="ics" class="secondary">Download calendar (.ics)</button>
-    <button id="csv" class="secondary">Download CSV</button>
-    <button id="clear" class="secondary">Clear list</button>
-    <button id="uploadFiles" class="secondary" type="button">Upload files</button>
-    <input id="files" type="file" multiple accept=".pdf,.docx,.xlsx,.xlsm,.pptx,.txt,.md,.csv,.tsv,.rtf,.png,.jpg,.jpeg,.gif,.webp" style="display:none">
-  </div>
-  <ul id="folderList" class="note"></ul>
-  <div class="row">
-    <label for="reminder">Calendar reminder</label>
-    <select id="reminder" style="width:auto">
-      <option value="">None</option>
-      <option value="day">1 day before</option>
-      <option value="hour">1 hour before</option>
-      <option value="both">1 day and 1 hour before</option>
-    </select>
-    <p class="note">Timed items become events that end at the due time. Rows with no valid date are left out of the calendar.</p>
-  </div>
-  <p id="status" class="note" role="status"></p>
-  <p id="count" role="status"></p>
-
-  <div class="table-wrap">
+  <section class="step" id="step3" hidden>
+    <h2><span class="num">3</span>Review, then export</h2>
+    <p class="note">Yellow rows need a look. Check every row before you export.</p>
+    <div class="table-wrap">
     <table>
       <thead>
         <tr>
@@ -112,7 +122,29 @@
       <tbody id="rows"></tbody>
     </table>
   </div>
-  <p class="note">Highlighted rows need review: missing date, missing time, a weekday that does not match the date, or a time that may be a class meeting. Check every row against the pasted syllabus. Exam and quiz stay separate from assignment because they weigh more on the grade.</p>
+    <details class="options">
+      <summary>More tools: sort, add a row, apply a default time, clear</summary>
+      <div class="row">
+        <button id="applyDefault" class="secondary">Apply default time to empty times</button>
+        <button id="sort" class="secondary">Sort by date and time</button>
+        <button id="sortType" class="secondary">Sort by type</button>
+        <button id="add" class="secondary">Add item by hand</button>
+        <button id="clear" class="secondary">Clear list</button>
+      </div>
+    </details>
+    <div class="row">
+      <label for="reminder">Calendar reminder</label>
+      <select id="reminder" style="width:auto">
+      <option value="">None</option>
+      <option value="day">1 day before</option>
+      <option value="hour">1 hour before</option>
+      <option value="both">1 day and 1 hour before</option>
+    </select>
+      <button id="ics" class="primary">Download calendar (.ics)</button>
+      <button id="csv" class="secondary">Download CSV</button>
+    </div>
+    <p class="note">Timed items become events that end at the due time. Rows with no valid date are left out of the calendar.</p>
+  </section>
 
   <p class="privacy note">Privacy: paste only text you are allowed to use. The pasted text or uploaded files are sent to our server and then to OpenAI so AI can extract items. The API key stays on the server. This page does not require an account. Nothing is saved on the server; your list is stored only in this browser.</p>
 </main>
@@ -158,6 +190,7 @@ function refreshAll() {
   const trs = [...rows.querySelectorAll("tr")];
   const n = trs.filter(refresh).length;
   countEl.textContent = trs.length ? n + " of " + trs.length + " item(s) need review" : "";
+  document.getElementById("step3").hidden = trs.length === 0;
   saveRows();
 }
 
@@ -361,25 +394,50 @@ loadRows();
 const filesInput = document.getElementById("files");
 const folderList = document.getElementById("folderList");
 
+let selectedFiles = [];
+
 function chosenFiles() {
-  return [...filesInput.files];
+  return selectedFiles;
+}
+
+function addFiles(list) {
+  [...list].forEach((file) => {
+    const same = selectedFiles.some((f) => f.name === file.name && f.size === file.size && f.lastModified === file.lastModified);
+    if (!same) selectedFiles.push(file);
+  });
+  listFolder();
 }
 
 function listFolder() {
   folderList.innerHTML = "";
-  const all = chosenFiles();
-  all.forEach((file) => {
+  selectedFiles.forEach((file, index) => {
     const li = document.createElement("li");
-    li.textContent = file.webkitRelativePath || file.name;
+    li.appendChild(document.createTextNode(file.name));
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.textContent = "\u00d7";
+    remove.setAttribute("aria-label", "Remove " + file.name);
+    remove.addEventListener("click", () => { selectedFiles.splice(index, 1); listFolder(); });
+    li.appendChild(remove);
     folderList.appendChild(li);
   });
-  if (all.length) {
-    status.textContent = "Loaded " + all.length + " file(s). Click Build schedule with AI to turn them into a schedule.";
+  if (selectedFiles.length) {
+    status.textContent = selectedFiles.length + " file(s) ready. Click Build schedule with AI.";
   }
 }
 
 document.getElementById("uploadFiles").addEventListener("click", () => filesInput.click());
-filesInput.addEventListener("change", listFolder);
+filesInput.addEventListener("change", () => { addFiles(filesInput.files); filesInput.value = ""; });
+
+// Drag and drop onto the page. Without this, the browser tries to open the dropped file instead.
+const step1 = document.getElementById("step1");
+["dragenter", "dragover", "drop"].forEach((name) => window.addEventListener(name, (event) => event.preventDefault()));
+step1.addEventListener("dragover", () => step1.classList.add("dragging"));
+step1.addEventListener("dragleave", () => step1.classList.remove("dragging"));
+step1.addEventListener("drop", (event) => {
+  step1.classList.remove("dragging");
+  if (event.dataTransfer && event.dataTransfer.files) addFiles(event.dataTransfer.files);
+});
 
 function toHHMM(hour, minute, period, otherPeriod) {
   let h = Number(hour);
@@ -509,7 +567,7 @@ document.getElementById("extract").addEventListener("click", async () => {
     const responseText = await response.text();
     let data;
     try { data = JSON.parse(responseText); }
-    catch (error) { throw new Error("Server returned: " + responseText); }
+    catch (error) { throw new Error("The server could not finish. A large or complex file can take too long on our free hosting. Try a screenshot, paste the text instead, or use the rule-based extractor."); }
     if (!response.ok) throw new Error(data.error || "Something went wrong.");
     let items = data.items || [];
     if (!items.length) items = scheduleFromText(syllabus, defaultTime, new Date().getFullYear());

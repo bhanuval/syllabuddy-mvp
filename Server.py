@@ -467,14 +467,32 @@ def decode_bytes(data):
     return data.decode("utf-8", errors="replace")
 
 
+MAX_PDF_PAGES = 60
+MAX_PDF_CHARS = 60000
+
+
 def extract_pdf(data):
+    """Reads text from the first pages only, one page at a time, so a long or odd PDF cannot hang or exhaust the server."""
     from pypdf import PdfReader
 
     reader = PdfReader(BytesIO(data))
+    if getattr(reader, "is_encrypted", False):
+        try:
+            reader.decrypt("")
+        except Exception:
+            raise RuntimeError("That PDF is password protected. Remove the password, or take a screenshot and upload that.")
     pages = []
-    for page in reader.pages:
-        pages.append(page.extract_text() or "")
-    return "\n".join(pages).strip()
+    total = 0
+    for number, page in enumerate(reader.pages):
+        if number >= MAX_PDF_PAGES or total >= MAX_PDF_CHARS:
+            break
+        try:
+            text = page.extract_text() or ""
+        except Exception:
+            text = ""                       # skip a page that cannot be read and keep the rest
+        pages.append(text)
+        total += len(text)
+    return "\n".join(pages).strip()[:MAX_PDF_CHARS]
 
 
 def extract_docx(data):
@@ -584,7 +602,7 @@ def openai_client():
         raise RuntimeError(
             "OPENAI_API_KEY is missing. Put a real OpenAI key in the .env file."
         )
-    return OpenAI(api_key=api_key)
+    return OpenAI(api_key=api_key, timeout=100.0, max_retries=0)   # fail with a clear message before the web server gives up at 120 seconds
 
 
 def extract_items(syllabus, course, notes, images, default_time=""):
@@ -610,10 +628,15 @@ def extract_items(syllabus, course, notes, images, default_time=""):
                 "image_url": "data:" + image["mime"] + ";base64," + encoded,
             }
         )
+    options = {}
+    if not OPENAI_MODEL.startswith(("o1", "o3", "o4", "gpt-5")):
+        options["temperature"] = 0          # repeat runs on the same file should give the same list
     response = client.responses.create(
         model=OPENAI_MODEL,
         instructions=SYSTEM_INSTRUCTIONS,
         input=[{"role": "user", "content": content}],
+        max_output_tokens=8000,
+        **options,
         text={
             "format": {
                 "type": "json_schema",
@@ -689,6 +712,12 @@ def extract():
         return json_error(str(error), 400)
     if not syllabus and not images:
         return json_error("Paste a syllabus first.", 400)
+    readable = re.sub(r"File: [^\n]*\n\[PDF had no readable text\]", "", syllabus).strip()
+    if not images and not readable:
+        return json_error(
+            "That PDF has no readable text (it may be a scan). Take a screenshot of the page and upload that instead, or paste the text.",
+            400,
+        )
     if len(syllabus) > MAX_TEXT_CHARS:
         syllabus = syllabus[:MAX_TEXT_CHARS]
     try:
