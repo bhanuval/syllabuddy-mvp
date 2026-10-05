@@ -557,6 +557,19 @@ function buildICS(list, reminder, now) {
         (r.details ? "\n\n" + String(r.details).slice(0, 2000) : "") + (link ? "\n\nLink: " + link : "");
     }
     lines.push(fold("DESCRIPTION:" + icsEscape(desc)));
+    // Outlook flattens line breaks in DESCRIPTION, so it also gets an HTML copy with a real list. Other calendars ignore it.
+    const esc = (t) => String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    let html;
+    if (many) {
+      html = "<p>Readings for this date:</p><ol>" + ev.rows.map((x) => {
+        const url = /^https?:\/\/\S+$/i.test(x.link || "") ? ' (<a href="' + esc(x.link) + '">link</a>)' : "";
+        const more = x.details ? "<br>" + esc(String(x.details).replace(/\s+/g, " ").slice(0, 300)) : "";
+        return "<li>" + esc(x.item) + url + more + "</li>";
+      }).join("") + "</ol>";
+    } else {
+      html = "<p>" + esc(desc).replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br>") + "</p>";
+    }
+    lines.push(fold("X-ALT-DESC;FMTTYPE=text/html:" + icsEscape("<html><body>" + html + "</body></html>")));
     if (link) lines.push(fold("URL:" + link));
     offsets.forEach((o) => {
       if (!tm && o !== "-P1D") return;
