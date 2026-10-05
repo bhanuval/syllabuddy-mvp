@@ -250,6 +250,17 @@ kept8 = Server.drop_untimed_classes([r8("Class", "Real class", "2026-10-09", "17
                                      r8("Class", "No date", ""), r8("Assignment", "Personal Project Report", "2026-10-25", "18:00")])
 assert [i["item"] for i in kept8] == ["Real class", "Personal Project Report"]
 
+# The course comes from the file name or the document's top lines when the AI leaves it blank
+assert Server.guess_course("File: MOT_6111_Strategy_Execution_syllabus_2026-06-01.pdf\nSyllabus for MOT 6111") == "MOT 6111"
+assert Server.guess_course("File: Fall-2026-83787-Gardiner-MOT6115-Syllabus.pdf\nMOT 6115 Syllabus") == "MOT 6115"
+assert Server.guess_course("File: notes.txt\nFall 2026 reading list for week 2026") == ""
+assert Server.guess_course("File: x.pdf\nCS 2050 Data Structures") == "CS 2050"
+nocourse = lambda syllabus, course, notes, images, default_time="": [{"type": "Assignment", "item": "A", "due": "2026-10-12", "time": "", "source": "x", "details": "", "link": "", "flag": "", "session": "", "course": ""}]
+Server.extract_items = nocourse
+dd = c.post("/extract", data={"files": (io.BytesIO(b"MOT 6111 Syllabus\nQuiz"), "MOT_6111_syllabus.txt")}, content_type="multipart/form-data").get_json()
+assert dd["items"][0]["course"] == "MOT 6111", dd
+Server.extract_items = fake
+
 from docx import Document
 d = Document(); d.add_paragraph("Quiz 1 due Oct 12 at 6 PM"); b = io.BytesIO(); d.save(b); b.seek(0)
 r = c.post("/extract", data={"files": (b, "syl.docx")}, content_type="multipart/form-data")

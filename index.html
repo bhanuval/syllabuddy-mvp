@@ -150,6 +150,7 @@
     <h2><span class="num">3</span>Review, then export</h2>
     <div class="reviewbar">
       <span id="draftChip" class="chip">AI draft</span>
+      <span id="courseLabel" class="note"></span>
       <span id="reviewText"></span>
       <button id="markClean" class="primary" type="button">Mark rows without issues as reviewed</button>
       <button id="toggleCols" class="linkish" type="button">Show all columns</button>
@@ -257,6 +258,7 @@ function refreshAll() {
     ? "Every row is reviewed. Nice work."
     : (trs.length - reviewed) + " row(s) are not marked reviewed yet. You can still export, but check them first.";
   const courses = new Set(trs.map((t) => val(t, 0)).filter(Boolean));
+  document.getElementById("courseLabel").textContent = courses.size === 1 ? "Course: " + [...courses][0] + "." : "";
   document.getElementById("rowsTable").classList.toggle("multi", courses.size > 1);
   document.getElementById("step3").hidden = trs.length === 0;
   saveRows();
@@ -492,6 +494,17 @@ document.querySelectorAll("thead th").forEach((th, i) => {
 });
 markHeaders();
 loadRows();
+document.getElementById("course").addEventListener("input", () => {
+  const typed = document.getElementById("course").value.trim();
+  if (!typed) return;
+  const present = new Set([...rows.querySelectorAll("tr")].map((tr) => tr.querySelectorAll("td")[0].querySelector("input").value).filter(Boolean));
+  if (present.size > 1) return;           // several courses are in the list, so a typed name must not flatten them
+  rows.querySelectorAll("tr").forEach((tr) => {
+    const cell = tr.querySelectorAll("td")[0].querySelector("input");
+    cell.value = typed;
+  });
+  refreshAll();
+});
 document.getElementById("markClean").addEventListener("click", () => {
   rows.querySelectorAll("tr").forEach((tr) => {
     if (!tr.classList.contains("needs-review")) {

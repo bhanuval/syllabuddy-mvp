@@ -825,6 +825,20 @@ def extract_items(syllabus, course, notes, images, default_time=""):
 
 
 MAX_DOCUMENTS = 5
+COURSE_CODE = re.compile(r"\b([A-Z]{2,5})[ _-]?(?!20(?:2[4-9]|30)\b)(\d{4})\b")
+
+
+def guess_course(doc):
+    """Course code such as 'MOT 6115', read from the file name or the top of the document. Used only when the AI gave none."""
+    head = (doc or "")[:1500]
+    first_line = head.splitlines()[0] if head else ""
+    for text in (first_line, head):
+        match = COURSE_CODE.search(text)
+        if match:
+            return match.group(1) + " " + match.group(2)
+    return ""
+
+
 
 
 def split_documents(syllabus):
@@ -843,15 +857,22 @@ def extract_all(syllabus, course, notes, images, default_time):
         jobs.append(("", images))
     if not jobs:
         return [], []
+    def with_course(doc, found):
+        fallback = guess_course(doc)
+        for item in found:
+            if fallback and not item.get("course"):
+                item["course"] = fallback
+        return found
+
     if len(jobs) == 1:
-        return extract_items(jobs[0][0], course, notes, jobs[0][1], default_time), []
+        return with_course(jobs[0][0], extract_items(jobs[0][0], course, notes, jobs[0][1], default_time)), []
     with ThreadPoolExecutor(max_workers=3) as pool:
         futures = [pool.submit(extract_items, doc, course, notes, imgs, default_time) for doc, imgs in jobs]
         items, warnings, last_error = [], [], None
         for (doc, imgs), future in zip(jobs, futures):
             label = (doc.splitlines()[0][:60] if doc else "the screenshots").strip()
             try:
-                items.extend(future.result())
+                items.extend(with_course(doc, future.result()))
             except Exception as error:
                 last_error = error
                 warnings.append("Could not read " + label + ". The rest of your files were read.")
