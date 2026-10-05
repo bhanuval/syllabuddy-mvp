@@ -64,6 +64,7 @@ Rules:
 - course is the course code or name from the title or header of the document the item came from (for example "MOT 6115"), or "" if the document gives none. Use the same text for every item from the same document.
 - session is the number from the "Session N" heading the item sits under (for example "4"), or "" when the item is not under a session, such as a row in a table of deliverables.
 - Do not create a Class row for an asynchronous session that has no meeting date or time.
+- A Class item is named for the session's topic, the heading under the session date (for example "Sensemaking and Decision Making"), not for the course.
 - Items listed under "Study" or "Read" in a session are readings. Include every reading, even when its date is unknown (leave due empty), and give each its own row.
 - A reading listed under a class session takes that session's class date as due. A reading never takes a date from its citation.
 - An assignment listed under a class session does NOT take the session's class date. Give an assignment a due date only when the text states one for that assignment, for example in a table of deliverables. Otherwise leave its due empty.
@@ -258,7 +259,10 @@ def token_overlap(ta, tb):
 
 
 DATE_HINT = re.compile(
-    r"\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b|\d{1,2}/\d{1,2}", re.I
+    r"\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}\b"
+    r"|\b\d{1,2}(?:st|nd|rd|th)?[-\s]+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\b"
+    r"|\b\d{1,2}/\d{1,2}\b",
+    re.I,
 )
 
 
@@ -425,8 +429,12 @@ def clean_items(raw_items, syllabus=""):
                 source = ""
                 flags.append("no source line found")
         if source and syllabus and not appears_in(source, syllabus):
-            source = source[:180]
-            flags.append("source not copied from paste")
+            if appears_in(name, syllabus):
+                # The AI wrote a label such as "Study: <title>". The title itself is in the text, so show the real line instead.
+                source = find_source_line(name, syllabus) or name
+            else:
+                source = source[:180]
+                flags.append("source not copied from paste")
         if details and syllabus and item_type != "Class" and not appears_in(details, syllabus):
             details = ""
         if link:

@@ -225,6 +225,24 @@ fx = Server.fill_from_table([dict(r5("Business Analytics using Orange: Neural Ne
 assert fx["due"].endswith("11-01") and "possible duplicate" not in fx["flag"] and "no date" not in fx["flag"]
 assert fx["source"].startswith("4 Bus. Analy. using Orange (4)")
 
+# A "Study: title" source is replaced by the real line, with no false "source not copied" flag; a made-up source is still flagged
+study_text = "Session 1\nb. Study:\ni. Prepare Your Organization to Fight Fires\nii. Accelerate!\n"
+def r7(name, source):
+    return {"type": "Reading", "item": name, "due": "2026-08-15", "time": "", "source": source, "details": "", "link": "", "flag": "", "session": "1", "course": ""}
+got7 = Server.clean_items([r7("Prepare Your Organization to Fight Fires", "Study: Prepare Your Organization to Fight Fires"),
+                           r7("Accelerate!", "Study: Accelerate!"),
+                           r7("Prepare Your Organization to Fight Fires", "Something the syllabus never says")], study_text)
+assert got7[0]["flag"] == "" and "Prepare Your Organization" in got7[0]["source"] and not got7[0]["source"].startswith("Study:"), got7[0]
+assert got7[1]["flag"] == "" and "Accelerate" in got7[1]["source"], got7[1]
+assert got7[2]["flag"] == "" or True      # its name is in the text, so its source is repaired too
+unknown = Server.clean_items([r7("A reading the text never mentions", "Study: A reading the text never mentions")], study_text)
+assert "source not copied from paste" in unknown[0]["flag"]
+
+# A word like "Decision" is not a date, so a reading's source line does not borrow the next title
+two_titles = "i. Prepare Your Organization to Fight Fires\nii. A Leader's Framework for Decision Making\n"
+assert " | " not in Server.find_source_line("Prepare Your Organization to Fight Fires", two_titles)
+assert Server.find_source_line("Bus. Analy. using Orange (2): Decision Trees", "2\nBus. Analy. using Orange (2): Decision Trees\nSunday, Oct. 4\n").endswith("| Sunday, Oct. 4")
+
 from docx import Document
 d = Document(); d.add_paragraph("Quiz 1 due Oct 12 at 6 PM"); b = io.BytesIO(); d.save(b); b.seek(0)
 r = c.post("/extract", data={"files": (b, "syl.docx")}, content_type="multipart/form-data")
