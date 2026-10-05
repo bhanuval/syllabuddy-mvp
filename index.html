@@ -1,42 +1,55 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="peach">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SyllaBuddy</title>
 <style>
-  :root { --ink:#1d2433; --muted:#5b6579; --line:#d5dae3; --bg:#f7f8fa; --accent:#1f5f8b; --warn:#fff4d6; }
+  :root, html[data-theme="peach"] { --bg:#FEF3EF; --surface:#FFFFFF; --ink:#483026; --muted:#6F574B; --line:#EBD3C8; --accent:#C23B28; --accent-ink:#FFFFFF; --soft:#FDE3D7; --warn:#FDEBB8; --ok:#2F7A4B; --ok-soft:#E3F2E6; --chip:#F9E7A6; --chip-ink:#483026; --focus:#E8A090; --display:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; --body:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; }
+  html[data-theme="sprout"] { --bg:#F3F7E8; --surface:#FFFFFF; --ink:#243B2D; --muted:#4F6656; --line:#D2E3BE; --accent:#306642; --accent-ink:#FFFFFF; --soft:#DDEFC8; --warn:#FBE3C8; --ok:#306642; --ok-soft:#E3F2E6; --chip:#C6EC72; --chip-ink:#243B2D; --focus:#8BBF6E; }
+  html[data-theme="calm"] { --bg:#EEF3F8; --surface:#FFFFFF; --ink:#1B365D; --muted:#4A5B73; --line:#CBD6E4; --accent:#1B365D; --accent-ink:#FFFFFF; --soft:#DCE7F2; --warn:#F8E1B5; --ok:#1F7A70; --ok-soft:#DDF0EC; --chip:#1F7A70; --chip-ink:#FFFFFF; --focus:#7FA3C9; --display:Georgia,"Times New Roman",serif; }
   * { box-sizing: border-box; }
-  body { margin:0; font:16px/1.5 Georgia, "Times New Roman", serif; color:var(--ink); background:var(--bg); }
+  body { margin:0; font:16px/1.5 var(--body); color:var(--ink); background:var(--bg); }
   main { max-width:1100px; margin:0 auto; padding:24px 16px 64px; }
-  h1 { font-size:1.6rem; margin:0 0 4px; }
-  p.sub { margin:0 0 20px; color:var(--muted); }
+  .brand { display:flex; align-items:center; gap:10px; margin-bottom:18px; }
+  .logo { display:inline-flex; width:42px; height:42px; border-radius:12px; background:var(--soft); color:var(--accent); align-items:center; justify-content:center; }
+  .wordmark { font:700 1.5rem var(--display); letter-spacing:-.01em; }
+  .wordmark b { color:var(--accent); }
+  h1.hero { font:800 clamp(2rem,5vw,3rem)/1.05 var(--display); margin:0 0 10px; letter-spacing:-.02em; }
+  h1.hero span { color:var(--accent); }
+  p.sub { margin:0 0 22px; color:var(--muted); font-size:1.05rem; max-width:46em; }
   label { font-weight:bold; display:block; margin-bottom:6px; }
   .grid { display:grid; grid-template-columns:2fr 1fr 1fr; gap:12px; margin-bottom:12px; }
   @media (max-width:700px) { .grid { grid-template-columns:1fr; } }
   input[type=text], input[type=time], select, textarea {
-    width:100%; padding:8px; font:inherit; border:1px solid var(--line); border-radius:4px; background:#fff;
+    width:100%; padding:8px; font:inherit; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--ink);
   }
   textarea { min-height:180px; font:14px/1.4 ui-monospace, Menlo, monospace; }
   td textarea { min-height:52px; font-size:.85rem; }
-  button { font:inherit; padding:8px 14px; border:1px solid var(--accent); background:var(--accent); color:#fff; border-radius:4px; cursor:pointer; }
+  button { font:inherit; font-weight:600; padding:9px 16px; border:1px solid var(--accent); background:var(--accent); color:var(--accent-ink); border-radius:999px; cursor:pointer; }
   button.secondary { background:#fff; color:var(--accent); }
+  button:hover { filter:brightness(.95); }
   input[type=file] { display:none; }
-  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline:3px solid #8ab9dd; outline-offset:1px; }
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline:3px solid var(--focus); outline-offset:1px; }
   .row { display:flex; gap:8px; flex-wrap:wrap; margin:12px 0; align-items:center; }
   .table-wrap { overflow-x:auto; }
-  table { width:100%; min-width:1180px; border-collapse:collapse; background:#fff; margin-top:8px; }
+  table { width:100%; min-width:1180px; border-collapse:collapse; background:#fff; margin-top:8px; border-radius:12px; }
   th, td { border:1px solid var(--line); padding:4px 6px; text-align:left; vertical-align:top; }
   td input, td select, td textarea { width:100%; font:inherit; font-size:.9rem; border:1px solid transparent; padding:4px; background:transparent; }
   td input:hover, td input:focus, td select:hover, td select:focus, td textarea:hover, td textarea:focus { border-color:var(--line); background:#fff; }
   tr.needs-review td { background:var(--warn); }
+  tr.reviewed td { background:var(--ok-soft); }
+  tr.reviewed td:first-child, tr.needs-review td:first-child { box-shadow:inset 4px 0 0 var(--ok); }
+  tr.needs-review td:first-child { box-shadow:inset 4px 0 0 var(--accent); }
   .note { color:var(--muted); font-size:.9rem; }
   #count { font-weight:bold; }
-  .check { font-size:.85rem; color:#7a4b00; }
-  .step { background:#fff; border:1px solid var(--line); border-radius:8px; padding:16px; margin-bottom:16px; }
-  .step h2 { font-size:1.15rem; margin:0 0 8px; }
+  .check { display:block; font-size:.85rem; color:var(--ink); margin-bottom:4px; }
+  td .rv { display:flex; align-items:center; gap:6px; font-weight:600; font-size:.85rem; margin:0; white-space:nowrap; }
+  td .rv input { width:auto; accent-color:var(--ok); }
+  .step { background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:20px; margin-bottom:18px; }
+  .step h2 { font:700 1.2rem var(--display); margin:0 0 8px; }
   .num { display:inline-flex; align-items:center; justify-content:center; width:1.6em; height:1.6em; border-radius:50%; background:var(--accent); color:#fff; font-size:.85rem; margin-right:8px; }
-  .step.dragging { border-color:var(--accent); background:#eef5fb; outline:2px dashed var(--accent); }
+  .step.dragging { border-color:var(--accent); background:var(--soft); outline:2px dashed var(--accent); }
   .step[hidden] { display:none; }
   button.linkish { background:none; border:none; color:var(--accent); text-decoration:underline; padding:8px 4px; }
   .filelist { list-style:none; padding:0; margin:8px 0; }
@@ -46,12 +59,40 @@
   details.options summary { cursor:pointer; color:var(--accent); }
   #extract { font-size:1.05rem; padding:10px 20px; }
   .privacy { margin-top:28px; padding-top:12px; border-top:1px solid var(--line); }
+  .reviewbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; background:var(--soft); border-radius:14px; padding:10px 14px; margin:8px 0 12px; }
+  .chip { display:inline-block; background:var(--chip); color:var(--chip-ink); font-weight:700; font-size:.85rem; padding:4px 12px; border-radius:999px; }
+  #reviewText { font-weight:600; }
+  table.compact { min-width:900px; }
+  table.compact th:nth-child(6), table.compact td:nth-child(6),
+  table.compact th:nth-child(8), table.compact td:nth-child(8),
+  table.compact th:nth-child(9), table.compact td:nth-child(9) { display:none; }
+  table.compact:not(.multi) th:nth-child(1), table.compact:not(.multi) td:nth-child(1) { display:none; }
 </style>
+<script>
+  // ?theme=peach, ?theme=sprout, or ?theme=calm shows the same product in each brand direction, for testing.
+  (function () {
+    var t = new URLSearchParams(location.search).get("theme");
+    if (["peach", "sprout", "calm"].indexOf(t) >= 0) document.documentElement.setAttribute("data-theme", t);
+  })();
+  document.addEventListener("DOMContentLoaded", function () {
+    var lines = { peach: ["Big semester. ", "Little buddy."], sprout: ["Grow at your ", "own pace."], calm: ["One list ", "you can trust."] };
+    var l = lines[document.documentElement.getAttribute("data-theme")] || lines.peach;
+    var hero = document.getElementById("hero");
+    hero.textContent = l[0];
+    var span = document.createElement("span");
+    span.textContent = l[1];
+    hero.appendChild(span);
+  });
+</script>
 </head>
 <body>
 <main>
-  <h1>SyllaBuddy</h1>
-  <p class="sub">Turn a syllabus into one reviewed schedule you can export to your calendar. You check every row.</p>
+  <header class="brand">
+    <span class="logo" aria-hidden="true"><svg viewBox="0 0 40 40" width="28" height="28"><g fill="currentColor"><circle cx="20" cy="8" r="6"/><circle cx="20" cy="32" r="6"/><circle cx="8" cy="20" r="6"/><circle cx="32" cy="20" r="6"/><circle cx="11.5" cy="11.5" r="5"/><circle cx="28.5" cy="11.5" r="5"/><circle cx="11.5" cy="28.5" r="5"/><circle cx="28.5" cy="28.5" r="5"/></g><circle cx="20" cy="20" r="5.5" fill="var(--soft)"/></svg></span>
+    <span class="wordmark">Sylla<b>Buddy</b></span>
+  </header>
+  <h1 class="hero" id="hero">Big semester. <span>Little buddy.</span></h1>
+  <p class="sub">Turn a syllabus into one reviewed schedule you can export to your calendar. The AI drafts it. You check every row.</p>
 
   <section class="step" id="step1">
     <h2><span class="num">1</span>Add your syllabus</h2>
@@ -102,9 +143,15 @@
 
   <section class="step" id="step3" hidden>
     <h2><span class="num">3</span>Review, then export</h2>
-    <p class="note">Yellow rows need a look. Check every row before you export.</p>
+    <div class="reviewbar">
+      <span id="draftChip" class="chip">AI draft</span>
+      <span id="reviewText"></span>
+      <button id="markClean" class="primary" type="button">Mark rows without issues as reviewed</button>
+      <button id="toggleCols" class="linkish" type="button">Show all columns</button>
+    </div>
+    <p class="note">Click any cell to edit it. Highlighted rows need a look. Tick Reviewed when a row is right.</p>
     <div class="table-wrap">
-    <table>
+    <table id="rowsTable" class="compact">
       <thead>
         <tr>
           <th>Course</th>
@@ -145,6 +192,7 @@
       <button id="csv" class="secondary">Download CSV</button>
     </div>
     <p class="note">Timed items become events that end at the due time. Rows with no valid date are left out of the calendar.</p>
+    <p id="exportNote" class="note" role="status"></p>
   </section>
 
   <p class="privacy note">Privacy: paste only text you are allowed to use. The pasted text or uploaded files are sent to our server and then to OpenAI so AI can extract items. The API key stays on the server. This page does not require an account. Nothing is saved on the server. Your list stays in this browser tab so a refresh does not lose it, and it is cleared when you close the tab.</p>
@@ -182,21 +230,36 @@ function refresh(tr) {
   }
   if (!val(tr, 4) && val(tr, 1) !== "Reading" && val(tr, 1) !== "Class") issues.push("no time");
   const unique = [...new Set(issues.filter(Boolean))];
-  tr.className = unique.length ? "needs-review" : "";
+  const done = tr.dataset.reviewed === "1";
+  tr.classList.toggle("reviewed", done);
+  tr.classList.toggle("needs-review", unique.length > 0 && !done);
   tr.querySelector(".check").textContent = unique.join(", ");
-  return unique.length > 0;
+  return unique.length > 0 && !done;
 }
+
+let draftKind = "Draft";
 
 function refreshAll() {
   const trs = [...rows.querySelectorAll("tr")];
   const n = trs.filter(refresh).length;
-  countEl.textContent = trs.length ? n + " of " + trs.length + " item(s) need review" : "";
+  countEl.textContent = "";
+  const reviewed = trs.filter((t) => t.dataset.reviewed === "1").length;
+  document.getElementById("reviewText").textContent = trs.length
+    ? reviewed + " of " + trs.length + " rows reviewed. " + (n ? n + (n === 1 ? " still needs a look." : " still need a look.") : "Nothing is flagged.")
+    : "";
+  document.getElementById("draftChip").textContent = draftKind;
+  document.getElementById("exportNote").textContent = !trs.length ? "" : reviewed === trs.length
+    ? "Every row is reviewed. Nice work."
+    : (trs.length - reviewed) + " row(s) are not marked reviewed yet. You can still export, but check them first.";
+  const courses = new Set(trs.map((t) => val(t, 0)).filter(Boolean));
+  document.getElementById("rowsTable").classList.toggle("multi", courses.size > 1);
   document.getElementById("step3").hidden = trs.length === 0;
   saveRows();
 }
 
 function addRow(r) {
   const tr = document.createElement("tr");
+  tr.dataset.reviewed = r.reviewed ? "1" : "";
   tr.dataset.flag = r.flag || "";
   tr.dataset.dflag = r.dflag || "";
   const vals = [r.course, r.type, r.item, r.due, r.time, r.origin, r.source, r.details, r.link];
@@ -239,6 +302,16 @@ function addRow(r) {
   const sp = document.createElement("span");
   sp.className = "check";
   chk.appendChild(sp);
+  const rv = document.createElement("label");
+  rv.className = "rv";
+  const box = document.createElement("input");
+  box.type = "checkbox";
+  box.checked = !!r.reviewed;
+  box.setAttribute("aria-label", "Reviewed");
+  box.addEventListener("change", () => { tr.dataset.reviewed = box.checked ? "1" : ""; refreshAll(); });
+  rv.appendChild(box);
+  rv.appendChild(document.createTextNode("Reviewed"));
+  chk.appendChild(rv);
   tr.appendChild(chk);
   const td = document.createElement("td");
   const del = document.createElement("button");
@@ -264,6 +337,7 @@ function rowData(tr) {
     link: val(tr, 8),
     flag: tr.dataset.flag || "",
     dflag: tr.dataset.dflag || "",
+    reviewed: tr.dataset.reviewed === "1",
   };
 }
 
@@ -389,6 +463,21 @@ document.querySelectorAll("thead th").forEach((th, i) => {
 });
 markHeaders();
 loadRows();
+document.getElementById("markClean").addEventListener("click", () => {
+  rows.querySelectorAll("tr").forEach((tr) => {
+    if (!tr.classList.contains("needs-review")) {
+      tr.dataset.reviewed = "1";
+      const box = tr.querySelector(".rv input");
+      if (box) box.checked = true;
+    }
+  });
+  refreshAll();
+});
+document.getElementById("toggleCols").addEventListener("click", () => {
+  const table = document.getElementById("rowsTable");
+  table.classList.toggle("compact");
+  document.getElementById("toggleCols").textContent = table.classList.contains("compact") ? "Show all columns" : "Show fewer columns";
+});
 document.getElementById("startFresh").addEventListener("click", () => {
   rows.innerHTML = "";
   sessionStorage.removeItem(STORAGE_KEY);
@@ -507,8 +596,9 @@ function scheduleFromText(text, defaultTime, year) {
   return items;
 }
 
-function fillTableFromItems(items, course, origin, defaultTime) {
+function fillTableFromItems(items, course, origin, defaultTime, kind) {
   rows.innerHTML = "";
+  draftKind = kind || "Draft";
   // With several syllabi in one upload, each row keeps the course the AI read from its own document.
   const found = new Set(items.map((i) => i.course).filter(Boolean));
   const useTyped = course && found.size <= 1;
@@ -553,7 +643,7 @@ document.getElementById("rules").addEventListener("click", () => {
     status.textContent = "Nothing in that text could be turned into a schedule. Try Build schedule with AI, or add items by hand.";
     return;
   }
-  fillTableFromItems(items, course, origin, defaultTime);
+  fillTableFromItems(items, course, origin, defaultTime, "Rules-only draft");
   status.textContent = "Built a schedule with " + items.length + " item(s) from your input.";
 });
 
@@ -591,13 +681,13 @@ document.getElementById("extract").addEventListener("click", async () => {
       status.textContent = "Could not build a schedule from that input. Try the rule-based extractor, or add rows by hand.";
       return;
     }
-    fillTableFromItems(items, course, origin, defaultTime);
+    fillTableFromItems(items, course, origin, defaultTime, "AI draft");
     status.textContent = "AI built a schedule with " + items.length + " item(s). Check every row before you export." + (data.warnings && data.warnings.length ? " " + data.warnings.join(" ") : "");
   } catch (error) {
     console.error(error);
     const fallback = scheduleFromText(syllabus, defaultTime, new Date().getFullYear());
     if (fallback.length) {
-      fillTableFromItems(fallback, course, origin, defaultTime);
+      fillTableFromItems(fallback, course, origin, defaultTime, "Rules-only draft");
       status.textContent = "AI was unavailable, so the schedule was built from your typed classes instead (" + fallback.length + " item(s)).";
     } else {
       status.textContent = "AI could not build the schedule: " + error.message + " You can use the rule-based extractor instead.";

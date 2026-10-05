@@ -64,6 +64,7 @@ Rules:
 - course is the course code or name from the title or header of the document the item came from (for example "MOT 6115"), or "" if the document gives none. Use the same text for every item from the same document.
 - session is the number from the "Session N" heading the item sits under (for example "4"), or "" when the item is not under a session, such as a row in a table of deliverables.
 - Do not create a Class row for an asynchronous session that has no meeting date or time.
+- Items listed under "Study" or "Read" in a session are readings. Include every reading, even when its date is unknown (leave due empty), and give each its own row.
 - A reading listed under a class session takes that session's class date as due. A reading never takes a date from its citation.
 - An assignment listed under a class session does NOT take the session's class date. Give an assignment a due date only when the text states one for that assignment, for example in a table of deliverables. Otherwise leave its due empty.
 - If month and day are given but year is not, use the year from Today's date. If that date is invalid (for example February 30), set due to "".
@@ -639,6 +640,16 @@ def table_deliverables(text):
     return rows
 
 
+def drop_stale_flags(flag):
+    """Once a date is found, 'no date' and 'possible duplicate' notes no longer apply."""
+    kept = [part for part in (flag or "").split("; ") if part and part != "no date" and not part.startswith("possible duplicate")]
+    return "; ".join(kept)
+
+
+def better_source(current, title, line):
+    return line if token_overlap(title_tokens(current), title_tokens(title)) < 2 else current
+
+
 def fill_from_table(items, text):
     """The AI sometimes leaves a deliverable's date blank or returns only the outline's copy of it. When the syllabus has a
     due-date table, undated items take the date of their best-matching table row (one row per item), and table rows that no
@@ -655,6 +666,7 @@ def fill_from_table(items, text):
             for r, row in enumerate(rows):
                 if row["due"] == out[k]["due"] and token_overlap(tk, title_tokens(row["title"])) >= 2:
                     used.add(r)
+                    out[k]["source"] = better_source(out[k]["source"], out[k]["item"], row["line"])
     pairs = []
     for k in plain:
         if out[k]["due"]:
@@ -675,9 +687,8 @@ def fill_from_table(items, text):
         filled.add(k)
         used.add(r)
         out[k]["due"] = rows[r]["due"]
-        out[k]["flag"] = "; ".join(x for x in (out[k]["flag"], "date taken from the deliverables table") if x)
-        if len(out[k]["source"]) < 4 or out[k]["source"].isdigit():
-            out[k]["source"] = rows[r]["line"]
+        out[k]["flag"] = "; ".join(x for x in (drop_stale_flags(out[k]["flag"]), "date taken from the deliverables table") if x)
+        out[k]["source"] = better_source(out[k]["source"], out[k]["item"], rows[r]["line"])
     if re.search(r"Deliverable\s+Due date", text or "", re.I):
         courses = {i.get("course", "") for i in out if i.get("course")}
         course_name = courses.pop() if len(courses) == 1 else ""
@@ -698,6 +709,50 @@ def fill_from_table(items, text):
                     "course": course_name,
                 }
             )
+    return out
+
+
+WEEKDAY_INDEX = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
+WEEKLY_RULE = re.compile(
+    r"due\s+before\s+(\d{1,2})(?::(\d{2}))?\s*([ap]m)\s+(Mon|Tues|Wednes|Thurs|Fri|Satur|Sun)days?", re.I
+)
+REPORT_HINT = re.compile(r"session report|write and submit your session", re.I)
+
+
+def session_report_dates(items, text):
+    """A session report's date in the AI answer is usually the class date. The syllabus's own rule (for example
+    'all session reports are due before 6pm Thursdays') gives the weekday and time, so the due date is suggested as the last
+    such weekday before class. If there is no rule, the date is left blank. Either way the row is flagged for Canvas."""
+    from datetime import timedelta
+
+    match = WEEKLY_RULE.search(text or "")
+    out = [dict(i) for i in items]
+    class_by_date = {(i.get("course", ""), i["due"]): i for i in out if i["type"] == "Class" and i["due"]}
+    for i in out:
+        if i["type"] in ("Reading", "Class") or not i["due"]:
+            continue
+        if not REPORT_HINT.search(i["source"] + " " + i["item"]):
+            continue
+        meeting = class_by_date.get((i.get("course", ""), i["due"]))
+        if meeting is None:
+            continue                                   # the date is not a class date, so it is not a session date
+        session = i.get("session") or meeting.get("session") or ""
+        if session and re.fullmatch(r"(?i)session reports?", i["item"].strip()):
+            i["item"] = "Session " + session + " report"
+        if match:
+            hour, minute, ampm = int(match.group(1)), int(match.group(2) or 0), match.group(3).lower()
+            weekday = WEEKDAY_INDEX[match.group(4)[:3].lower()]
+            day = datetime.strptime(i["due"], "%Y-%m-%d") - timedelta(days=1)
+            while day.weekday() != weekday:
+                day -= timedelta(days=1)
+            i["due"] = day.strftime("%Y-%m-%d")
+            i["time"] = "%02d:%02d" % ((hour % 12) + (12 if ampm == "pm" else 0), minute)
+            rule_words = re.sub(r"\s+", " ", match.group(0).split("before", 1)[1]).strip()
+            note = "date suggested from the syllabus rule (due before " + rule_words + "); confirm it in Canvas"
+        else:
+            i["due"] = ""
+            note = "the syllabus does not give this due date; check Canvas"
+        i["flag"] = "; ".join(x for x in (drop_stale_flags(i["flag"]), note) if x)
     return out
 
 
@@ -749,7 +804,10 @@ def extract_items(syllabus, course, notes, images, default_time=""):
         parsed = json.loads(raw_text)
     except json.JSONDecodeError as error:
         raise RuntimeError("The AI did not return valid JSON.") from error
-    return fill_from_table(merge_duplicates(drop_session_dates(clean_items(parsed.get("items"), syllabus))), syllabus)
+    items = drop_session_dates(clean_items(parsed.get("items"), syllabus))
+    items = session_report_dates(items, syllabus)
+    items = fill_from_table(merge_duplicates(items), syllabus)
+    return [i for i in items if not (i["type"] == "Class" and not i["due"])]        # a class meeting with no date cannot go on a calendar
 
 
 MAX_DOCUMENTS = 5

@@ -199,6 +199,32 @@ dated = [r5("Bus. Analy. using Orange (1): Introduction", "2026-09-20")]
 kept = Server.fill_from_table(dated, table_text)
 assert [i["item"] for i in kept].count("Bus. Analy. using Orange (1): Introduction") == 1 and kept[0]["due"] == "2026-09-20"
 
+# Session reports: the class date is not the due date; the weekly rule suggests one, flagged
+def r6(kind, name, due, source, session="", course="MOT X", time=""):
+    return {"type": kind, "item": name, "due": due, "time": time, "source": source, "details": "", "link": "", "flag": "", "session": session, "course": course}
+rule_text = "Note that all session reports are due before 6pm Thursdays. Session 1 ... Write and submit your session report"
+sess_items = [
+    r6("Class", "Strategy", "2026-08-15", "1.30pm Saturday 15 August in the classroom", "1"),
+    r6("Class", "Strategy", "2026-09-04", "5.30pm Friday 4 September in the classroom", "2"),
+    r6("Assignment", "Session Report", "2026-08-15", "Write and submit your session report (via Assignments in Canvas)", "1"),
+    r6("Assignment", "Session Report", "2026-09-04", "Write and submit your session report (via Assignments in Canvas)", "2"),
+    r6("Assignment", "Personal Project Report", "2026-10-25", "Assignment due at 6pm Sunday 25 October", "5", time="18:00"),
+]
+sr = {i["item"]: i for i in Server.session_report_dates(sess_items, rule_text)}
+assert sr["Session 1 report"]["due"] == "2026-08-13" and sr["Session 1 report"]["time"] == "18:00"     # Thursday before Saturday Aug 15
+assert sr["Session 2 report"]["due"] == "2026-09-03"                                                    # Thursday before Friday Sept 4
+assert "confirm it in Canvas" in sr["Session 1 report"]["flag"]
+assert sr["Personal Project Report"]["due"] == "2026-10-25"                                             # a real due date is untouched
+none = {i["item"]: i for i in Server.session_report_dates(sess_items, "no weekly rule here")}
+assert none["Session 1 report"]["due"] == "" and "check Canvas" in none["Session 1 report"]["flag"]
+
+# Stale flags are removed once a date is found, and a generic source is replaced by the table row
+assert Server.drop_stale_flags("no date; possible duplicate of: X; something else") == "something else"
+tbl = "Deliverable Due date\n4 Bus. Analy. using Orange (4): Neural Networks Sunday, Nov. 1"
+fx = Server.fill_from_table([dict(r5("Business Analytics using Orange: Neural Networks"), flag="no date; possible duplicate of: Intro", source="Assignment")], tbl)[0]
+assert fx["due"].endswith("11-01") and "possible duplicate" not in fx["flag"] and "no date" not in fx["flag"]
+assert fx["source"].startswith("4 Bus. Analy. using Orange (4)")
+
 from docx import Document
 d = Document(); d.add_paragraph("Quiz 1 due Oct 12 at 6 PM"); b = io.BytesIO(); d.save(b); b.seek(0)
 r = c.post("/extract", data={"files": (b, "syl.docx")}, content_type="multipart/form-data")
