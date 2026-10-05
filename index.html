@@ -182,7 +182,7 @@
       <button id="markClean" class="primary" type="button">Mark rows without issues as reviewed</button>
       <button id="toggleCols" class="linkish" type="button">Show all columns</button>
     </div>
-    <p class="note">Click any cell to edit it. Highlighted rows need a look. Tick Reviewed when a row is right.</p>
+    <p class="note">Click any cell to edit it. Highlighted rows have a note in the Check column and need your decision. Readings and class meetings do not need a due time. Tick Reviewed when a row is right.</p>
     <div class="table-wrap">
     <table id="rowsTable" class="compact">
       <thead>
@@ -595,14 +595,20 @@ document.getElementById("course").addEventListener("input", () => {
   refreshAll();
 });
 document.getElementById("markClean").addEventListener("click", () => {
+  let marked = 0;
   rows.querySelectorAll("tr").forEach((tr) => {
-    if (!tr.classList.contains("needs-review")) {
+    if (!tr.classList.contains("needs-review") && tr.dataset.reviewed !== "1") {
       tr.dataset.reviewed = "1";
       const box = tr.querySelector(".rv input");
       if (box) box.checked = true;
+      marked++;
     }
   });
   refreshAll();
+  const left = rows.querySelectorAll("tr.needs-review").length;
+  status.textContent = "Marked " + marked + " row(s) as reviewed. " + (left
+    ? left + " row(s) still need your decision. Each has a note in the Check column. Fix the row if needed, then tick Reviewed."
+    : "Every row is reviewed.");
 });
 document.getElementById("toggleCols").addEventListener("click", () => {
   const table = document.getElementById("rowsTable");
