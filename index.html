@@ -424,29 +424,53 @@ function buildICS(list, reminder, now) {
   const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//SyllaBuddy//Syllabus deadlines//EN", "CALSCALE:GREGORIAN"];
   const offsets = reminder === "day" ? ["-P1D"] : reminder === "hour" ? ["-PT1H"] : reminder === "both" ? ["-P1D", "-PT1H"] : [];
   let count = 0, skipped = 0;
-  list.forEach((r, i) => {
+  // Readings with the same course, date, and time become one calendar item that lists them all.
+  const events = [];
+  const groups = new Map();
+  list.forEach((r) => {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(r.date || "");
     if (!m || !r.item) { skipped++; return; }
     const y = +m[1], mo = +m[2] - 1, d = +m[3], day = new Date(y, mo, d);
     if (day.getMonth() !== mo) { skipped++; return; }
     const tm = /^(\d{2}):(\d{2})$/.exec(r.time || "");
+    const entry = { rows: [r], y, mo, d, day, tm };
+    if (r.type === "Reading") {
+      const key = (r.course || "") + "|" + r.date + "|" + (tm ? r.time : "");
+      if (groups.has(key)) { groups.get(key).rows.push(r); return; }
+      groups.set(key, entry);
+    }
+    events.push(entry);
+  });
+  events.forEach((ev, i) => {
+    const r = ev.rows[0], tm = ev.tm, many = ev.rows.length > 1;
     lines.push("BEGIN:VEVENT", "UID:syllabuddy-" + stamp + "-" + i + "@local", "DTSTAMP:" + stamp);
     if (tm) {
-      const due = new Date(y, mo, d, +tm[1], +tm[2]);
+      const due = new Date(ev.y, ev.mo, ev.d, +tm[1], +tm[2]);
       const start = new Date(due.getTime() - 30 * 60000);
       lines.push("DTSTART:" + fmtLocal(start), "DTEND:" + fmtLocal(due));
     } else {
-      lines.push("DTSTART;VALUE=DATE:" + fmtDate(day), "DTEND;VALUE=DATE:" + fmtDate(new Date(y, mo, d + 1)));
+      lines.push("DTSTART;VALUE=DATE:" + fmtDate(ev.day), "DTEND;VALUE=DATE:" + fmtDate(new Date(ev.y, ev.mo, ev.d + 1)));
     }
-    lines.push(fold("SUMMARY:" + icsEscape((r.course ? r.course + ": " : "") + r.item)));
-    const link = /^https?:\/\/\S+$/i.test(r.link || "") ? r.link : "";
-    const desc = "Type: " + (r.type || "") + (tm ? ". Due at " + r.time : "") + (r.source ? ". Source: " + r.source : "") +
-      (r.details ? "\n\n" + String(r.details).slice(0, 2000) : "") + (link ? "\n\nLink: " + link : "");
+    const prefix = r.course ? r.course + ": " : "";
+    lines.push(fold("SUMMARY:" + icsEscape(many ? prefix + ev.rows.length + " readings" : prefix + r.item)));
+    let desc;
+    let link = "";
+    if (many) {
+      desc = "Readings for this date:\n" + ev.rows.map((x, n) => {
+        const url = /^https?:\/\/\S+$/i.test(x.link || "") ? "\n   Link: " + x.link : "";
+        const more = x.details ? "\n   " + String(x.details).replace(/\s+/g, " ").slice(0, 300) : "";
+        return (n + 1) + ". " + x.item + url + more;
+      }).join("\n").slice(0, 6000);
+    } else {
+      link = /^https?:\/\/\S+$/i.test(r.link || "") ? r.link : "";
+      desc = "Type: " + (r.type || "") + (tm ? ". Due at " + r.time : "") + (r.source ? ". Source: " + r.source : "") +
+        (r.details ? "\n\n" + String(r.details).slice(0, 2000) : "") + (link ? "\n\nLink: " + link : "");
+    }
     lines.push(fold("DESCRIPTION:" + icsEscape(desc)));
     if (link) lines.push(fold("URL:" + link));
     offsets.forEach((o) => {
       if (!tm && o !== "-P1D") return;
-      lines.push("BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:" + icsEscape(r.item), (tm ? "TRIGGER;RELATED=END:" : "TRIGGER:") + o, "END:VALARM");
+      lines.push("BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:" + icsEscape(many ? ev.rows.length + " readings" : r.item), (tm ? "TRIGGER;RELATED=END:" : "TRIGGER:") + o, "END:VALARM");
     });
     lines.push("END:VEVENT");
     count++;
@@ -749,7 +773,7 @@ document.getElementById("ics").addEventListener("click", () => {
   a.href = URL.createObjectURL(new Blob([res.text], { type: "text/calendar" }));
   a.download = "syllabuddy-calendar.ics";
   a.click();
-  status.textContent = "Exported " + res.count + " calendar item(s)" + (res.skipped ? "; " + res.skipped + " row(s) with no valid date were left out." : ".") + " Check each row before relying on it.";
+  status.textContent = "Exported " + res.count + " calendar item(s) (readings on the same day are grouped into one)" + (res.skipped ? "; " + res.skipped + " row(s) with no valid date were left out." : ".") + " Check each row before relying on it.";
 });
 document.getElementById("csv").addEventListener("click", () => {
   const lines = [LABELS];

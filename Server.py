@@ -764,6 +764,12 @@ def session_report_dates(items, text):
     return out
 
 
+def drop_untimed_classes(items):
+    """A real class meeting has a date and a start time. An asynchronous session (no meeting) is dropped, because it only
+    repeats an assignment's due date and cannot be a calendar event."""
+    return [i for i in items if not (i["type"] == "Class" and (not i["due"] or not i["time"]))]
+
+
 def extract_items(syllabus, course, notes, images, default_time=""):
     client = openai_client()
     user_text = (
@@ -815,7 +821,7 @@ def extract_items(syllabus, course, notes, images, default_time=""):
     items = drop_session_dates(clean_items(parsed.get("items"), syllabus))
     items = session_report_dates(items, syllabus)
     items = fill_from_table(merge_duplicates(items), syllabus)
-    return [i for i in items if not (i["type"] == "Class" and not i["due"])]        # a class meeting with no date cannot go on a calendar
+    return drop_untimed_classes(items)
 
 
 MAX_DOCUMENTS = 5

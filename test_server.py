@@ -243,6 +243,13 @@ two_titles = "i. Prepare Your Organization to Fight Fires\nii. A Leader's Framew
 assert " | " not in Server.find_source_line("Prepare Your Organization to Fight Fires", two_titles)
 assert Server.find_source_line("Bus. Analy. using Orange (2): Decision Trees", "2\nBus. Analy. using Orange (2): Decision Trees\nSunday, Oct. 4\n").endswith("| Sunday, Oct. 4")
 
+# Asynchronous sessions come back as "Class" rows with a date but no start time; they are dropped
+def r8(kind, name, due, time=""):
+    return {"type": kind, "item": name, "due": due, "time": time, "source": "x", "details": "", "link": "", "flag": "", "session": "", "course": ""}
+kept8 = Server.drop_untimed_classes([r8("Class", "Real class", "2026-10-09", "17:30"), r8("Class", "Personal Project", "2026-10-25"),
+                                     r8("Class", "No date", ""), r8("Assignment", "Personal Project Report", "2026-10-25", "18:00")])
+assert [i["item"] for i in kept8] == ["Real class", "Personal Project Report"]
+
 from docx import Document
 d = Document(); d.add_paragraph("Quiz 1 due Oct 12 at 6 PM"); b = io.BytesIO(); d.save(b); b.seek(0)
 r = c.post("/extract", data={"files": (b, "syl.docx")}, content_type="multipart/form-data")
