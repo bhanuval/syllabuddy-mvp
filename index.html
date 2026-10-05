@@ -7,6 +7,12 @@
 <style>
   :root, html[data-theme="peach"] { --bg:#FEF3EF; --surface:#FFFFFF; --ink:#483026; --muted:#6F574B; --line:#EBD3C8; --accent:#C23B28; --accent-ink:#FFFFFF; --soft:#FDE3D7; --warn:#FDEBB8; --ok:#2F7A4B; --ok-soft:#E3F2E6; --chip:#F9E7A6; --chip-ink:#483026; --focus:#E8A090; --display:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; --body:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; }
   html[data-theme="sprout"] { --bg:#F3F7E8; --surface:#FFFFFF; --ink:#243B2D; --muted:#4F6656; --line:#D2E3BE; --accent:#306642; --accent-ink:#FFFFFF; --soft:#DDEFC8; --warn:#FBE3C8; --ok:#306642; --ok-soft:#E3F2E6; --chip:#C6EC72; --chip-ink:#243B2D; --focus:#8BBF6E; }
+  html[data-theme="orbit"] { --bg:#F4F0FF; --surface:#FFFFFF; --ink:#30204F; --muted:#5F5170; --line:#DCD3EC; --accent:#6542C1; --accent-ink:#FFFFFF; --soft:#DFD5FB; --warn:#EAFB9B; --ok:#2E7D5B; --ok-soft:#DDF3E6; --chip:#EAFB9B; --chip-ink:#30204F; --focus:#9D82EF; }
+  html[data-theme="electric"] { --bg:#FFFDF3; --surface:#FFFFFF; --ink:#25243A; --muted:#595668; --line:#25243A; --accent:#4337BA; --accent-ink:#FFFFFF; --soft:#FFE666; --warn:#FFE666; --ok:#1F7A3F; --ok-soft:#DDF4D8; --chip:#FFA9CB; --chip-ink:#25243A; --focus:#4337BA; }
+  html[data-theme="electric"] .step { border:2px solid var(--ink); border-radius:0; box-shadow:4px 4px 0 var(--ink); }
+  html[data-theme="electric"] button { border-radius:0; border:2px solid var(--ink); }
+  html[data-theme="electric"] .reviewbar, html[data-theme="electric"] .speech { border-radius:0; border:2px solid var(--ink); }
+  html[data-theme="electric"] h1.hero { text-transform:uppercase; font-weight:900; }
   html[data-theme="calm"] { --bg:#EEF3F8; --surface:#FFFFFF; --ink:#1B365D; --muted:#4A5B73; --line:#CBD6E4; --accent:#1B365D; --accent-ink:#FFFFFF; --soft:#DCE7F2; --warn:#F8E1B5; --ok:#1F7A70; --ok-soft:#DDF0EC; --chip:#1F7A70; --chip-ink:#FFFFFF; --focus:#7FA3C9; --display:Georgia,"Times New Roman",serif; }
   * { box-sizing: border-box; }
   body { margin:0; font:16px/1.5 var(--body); color:var(--ink); background:var(--bg); }
@@ -59,6 +65,19 @@
   details.options summary { cursor:pointer; color:var(--accent); }
   #extract { font-size:1.05rem; padding:10px 20px; }
   .privacy { margin-top:28px; padding-top:12px; border-top:1px solid var(--line); }
+  .herorow { display:flex; gap:24px; align-items:center; justify-content:space-between; flex-wrap:wrap; }
+  .herorow > div:first-child { flex:1 1 420px; }
+  .buddy-wrap { display:flex; flex-direction:column; align-items:center; gap:6px; width:190px; flex:0 0 auto; }
+  html[data-theme="calm"] .buddy-wrap { display:none; }
+  .speech { background:var(--surface); border:1px solid var(--line); border-radius:16px 16px 16px 4px; padding:8px 12px; font-size:.88rem; max-width:210px; text-align:center; min-height:2.6em; }
+  .buddy-button { background:none; border:0; padding:0; width:124px; cursor:pointer; color:var(--ink); border-radius:12px; }
+  .buddy-button:hover { filter:none; }
+  .buddy-svg { width:100%; overflow:visible; display:block; }
+  .buddy-body { transform-origin:160px 260px; animation:buddy-bob 4s ease-in-out infinite; }
+  .is-active .buddy-body { animation:buddy-wiggle .65s ease-in-out 2; }
+  @keyframes buddy-bob { 0%,100% { transform:translateY(0) rotate(-2deg); } 50% { transform:translateY(-6px) rotate(2deg); } }
+  @keyframes buddy-wiggle { 0%,100% { transform:rotate(0); } 25% { transform:rotate(-9deg) translateY(-6px); } 75% { transform:rotate(9deg) translateY(-6px); } }
+  @media (prefers-reduced-motion: reduce) { .buddy-body, .is-active .buddy-body { animation:none; } }
   .reviewbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; background:var(--soft); border-radius:14px; padding:10px 14px; margin:8px 0 12px; }
   .chip { display:inline-block; background:var(--chip); color:var(--chip-ink); font-weight:700; font-size:.85rem; padding:4px 12px; border-radius:999px; }
   #reviewText { font-weight:600; }
@@ -77,10 +96,10 @@
   // ?theme=peach, ?theme=sprout, or ?theme=calm shows the same product in each brand direction, for testing.
   (function () {
     var t = new URLSearchParams(location.search).get("theme");
-    if (["peach", "sprout", "calm"].indexOf(t) >= 0) document.documentElement.setAttribute("data-theme", t);
+    if (["peach", "sprout", "orbit", "electric", "calm"].indexOf(t) >= 0) document.documentElement.setAttribute("data-theme", t);
   })();
   document.addEventListener("DOMContentLoaded", function () {
-    var lines = { peach: ["Big semester. ", "Little buddy."], sprout: ["Grow at your ", "own pace."], calm: ["One list ", "you can trust."] };
+    var lines = { peach: ["Big semester. ", "Little buddy."], sprout: ["Grow at your ", "own pace."], orbit: ["A whole universe. ", "One clear plan."], electric: ["Less scramble. ", "More semester."], calm: ["One list ", "you can trust."] };
     var l = lines[document.documentElement.getAttribute("data-theme")] || lines.peach;
     var hero = document.getElementById("hero");
     hero.textContent = l[0];
@@ -96,8 +115,16 @@
     <span class="logo" aria-hidden="true"><svg viewBox="0 0 40 40" width="28" height="28"><g fill="currentColor"><circle cx="20" cy="8" r="6"/><circle cx="20" cy="32" r="6"/><circle cx="8" cy="20" r="6"/><circle cx="32" cy="20" r="6"/><circle cx="11.5" cy="11.5" r="5"/><circle cx="28.5" cy="11.5" r="5"/><circle cx="11.5" cy="28.5" r="5"/><circle cx="28.5" cy="28.5" r="5"/></g><circle cx="20" cy="20" r="5.5" fill="var(--soft)"/></svg></span>
     <span class="wordmark">Sylla<b>Buddy</b></span>
   </header>
-  <h1 class="hero" id="hero">Big semester. <span>Little buddy.</span></h1>
-  <p class="sub">Turn a syllabus into one reviewed schedule you can export to your calendar. The AI drafts it. You check every row.</p>
+  <div class="herorow">
+    <div>
+      <h1 class="hero" id="hero">Big semester. <span>Little buddy.</span></h1>
+      <p class="sub">Turn a syllabus into one reviewed schedule you can export to your calendar. The AI drafts it. You check every row.</p>
+    </div>
+    <div class="buddy-wrap" id="buddyWrap">
+      <div class="speech" id="buddySpeech" role="status" aria-live="polite"></div>
+      <button type="button" class="buddy-button" id="buddyBtn" aria-label="Cheer me on"></button>
+    </div>
+  </div>
 
   <section class="step" id="step1">
     <h2><span class="num">1</span>Add your syllabus</h2>
@@ -245,6 +272,66 @@ function refresh(tr) {
 
 let draftKind = "Draft";
 
+// The buddy: Covenant's mascot concepts, ported to plain SVG. It is a status companion, not decoration: it says what state the draft is in.
+const BUDDY_COLORS = { peach: ["#ff886f", "#d85b4d", "#ffc2a2"], star: ["#9d82ef", "#7154bd", "#cdbaff"], sprout: ["#87bd56", "#568e36", "#c6eb91"], note: ["#ffcf45", "#d9a127", "#ffeba0"] };
+const THEME_BUDDY = { peach: "peach", sprout: "sprout", orbit: "star", electric: "note", calm: "" };
+const THEME_LINES = {
+  peach: { idle: "Hey, semester. We've got this.", cheer: "One step at a time. You've got this!" },
+  sprout: { idle: "You don't have to do it all today.", cheer: "Small wins deserve a big cheer!" },
+  orbit: { idle: "Ready for your next mission?", cheer: "A little care goes a long way." },
+  electric: { idle: "Your brain called. It wants a break.", cheer: "Progress beats perfect. Let's go!" },
+  calm: { idle: "", cheer: "" },
+};
+function buddySVG(kind, active) {
+  const c = BUDDY_COLORS[kind] || BUDDY_COLORS.peach;
+  const body = kind === "note"
+    ? "M109 65h102q39 0 39 40v120q0 40-40 40H110q-40 0-40-40V105q0-40 39-40Z"
+    : "M160 61c-64 0-91 39-92 103l-1 44c-1 40 33 60 93 60s94-20 93-60l-1-44c-1-64-28-103-92-103Z";
+  const arm = active ? "M227 181c20-9 23-29 19-47-3-13 11-20 21-8 25 32 13 76-19 88Z" : "M230 177c41-18 51 8 33 35-9 13-26 17-43 9Z";
+  const mouth = active ? "M139 188q21 7 42 0v5c-2 30-40 30-42 0Z" : "M143 191q17 21 34 0Z";
+  let extra = "";
+  if (kind === "peach") extra = '<path d="M155 68c-9-35 20-52 48-44-2 26-20 44-48 44Z" fill="#4e9362"/><path d="M151 68q-8-15-4-29" stroke="#764334" stroke-width="7" fill="none" stroke-linecap="round"/>';
+  if (kind === "star") extra = '<path d="m107 77-12-36 36 25m61 0 34-25-12 36" fill="' + c[0] + '"/><path d="m160 78 6 12 14 2-10 10 2 14-12-7-12 7 2-14-10-10 14-2Z" fill="#eafb9b"/>';
+  if (kind === "sprout") extra = '<path d="M160 70V40" stroke="#49783b" stroke-width="7" fill="none"/><path d="M159 50C126 58 105 39 107 20c31-2 50 10 52 30Z" fill="#568e36"/><path d="M161 50c0-30 22-40 50-30-4 20-20 30-50 30Z" fill="#9bd363"/>';
+  if (kind === "note") extra = '<path d="M209 66v30h40Z" fill="#fff3be"/><path d="M113 83h39" stroke="' + c[1] + '" stroke-width="7" stroke-linecap="round"/>';
+  const eyeRy = active ? 14 : 18;
+  const teeth = active ? '<path d="M143 190q17 5 34 0v8h-34Z" fill="white"/><ellipse cx="160" cy="211" rx="10" ry="5" fill="#f38f9b"/>' : "";
+  return '<svg viewBox="0 0 320 320" class="buddy-svg' + (active ? " is-active" : "") + '" aria-hidden="true" focusable="false">' +
+    '<ellipse cx="160" cy="290" rx="83" ry="11" fill="currentColor" opacity=".12"/><g class="buddy-body">' +
+    '<ellipse cx="117" cy="276" rx="29" ry="14" fill="' + c[1] + '" transform="rotate(-9 117 276)"/><ellipse cx="203" cy="276" rx="29" ry="14" fill="' + c[1] + '" transform="rotate(9 203 276)"/>' +
+    '<path d="M90 177C49 159 39 185 57 212c9 13 26 17 43 9Z" fill="' + c[1] + '"/><path d="' + arm + '" fill="' + c[1] + '"/>' +
+    '<path d="' + body + '" fill="' + c[0] + '"/><ellipse cx="160" cy="227" rx="52" ry="30" fill="' + c[2] + '"/>' + extra +
+    '<ellipse cx="126" cy="148" rx="28" ry="36" fill="white"/><ellipse cx="190" cy="148" rx="28" ry="36" fill="white"/>' +
+    '<ellipse cx="132" cy="153" rx="12" ry="' + eyeRy + '" fill="#293342"/><ellipse cx="184" cy="153" rx="12" ry="' + eyeRy + '" fill="#293342"/><ellipse cx="136" cy="147" rx="4" ry="5" fill="white"/><ellipse cx="188" cy="147" rx="4" ry="5" fill="white"/>' +
+    '<path d="M111 104q13-9 26-3m40 0q13-6 26 3" stroke="' + c[1] + '" stroke-width="7" stroke-linecap="round" fill="none"/>' +
+    '<ellipse cx="103" cy="185" rx="15" ry="8" fill="' + c[1] + '" opacity=".4"/><ellipse cx="216" cy="185" rx="15" ry="8" fill="' + c[1] + '" opacity=".4"/>' +
+    '<path d="' + mouth + '" fill="#293342"/>' + teeth +
+    '<path d="m148 228 9 9 17-19" fill="none" stroke="' + c[1] + '" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/></g></svg>';
+}
+const buddyTheme = () => document.documentElement.getAttribute("data-theme") || "peach";
+let buddyState = "idle", buddyBusy = false, buddyCheer = "";
+function setBuddy(state) {
+  buddyState = state;
+  const theme = buddyTheme();
+  const kind = THEME_BUDDY[theme] || "";
+  const lines = THEME_LINES[theme] || THEME_LINES.peach;
+  const text = buddyCheer || {
+    idle: lines.idle,
+    working: "Reading your files. One moment...",
+    ready: "Draft ready. Check the highlighted rows.",
+    done: "Every row reviewed. Nice work!",
+    error: "That didn't work. Try a screenshot, or paste the text.",
+  }[state];
+  document.getElementById("buddySpeech").textContent = kind ? text : "";
+  document.getElementById("buddyBtn").innerHTML = kind ? buddySVG(kind, state === "done" || !!buddyCheer) : "";
+}
+document.getElementById("buddyBtn").addEventListener("click", () => {
+  const lines = THEME_LINES[buddyTheme()] || THEME_LINES.peach;
+  buddyCheer = lines.cheer;
+  setBuddy(buddyState);
+  setTimeout(() => { buddyCheer = ""; setBuddy(buddyState); }, 2600);
+});
+
 function refreshAll() {
   const trs = [...rows.querySelectorAll("tr")];
   const n = trs.filter(refresh).length;
@@ -261,6 +348,7 @@ function refreshAll() {
   document.getElementById("courseLabel").textContent = courses.size === 1 ? "Course: " + [...courses][0] + "." : "";
   document.getElementById("rowsTable").classList.toggle("multi", courses.size > 1);
   document.getElementById("step3").hidden = trs.length === 0;
+  if (!buddyBusy && !(buddyState === "error" && trs.length === 0)) setBuddy(!trs.length ? "idle" : reviewed === trs.length ? "done" : "ready");
   saveRows();
 }
 
@@ -494,6 +582,7 @@ document.querySelectorAll("thead th").forEach((th, i) => {
 });
 markHeaders();
 loadRows();
+if (!rows.querySelector("tr")) setBuddy("idle");
 document.getElementById("course").addEventListener("input", () => {
   const typed = document.getElementById("course").value.trim();
   if (!typed) return;
@@ -701,6 +790,8 @@ document.getElementById("extract").addEventListener("click", async () => {
   }
   const button = document.getElementById("extract");
   button.disabled = true;
+  buddyBusy = true;
+  setBuddy("working");
   status.textContent = "AI is building your schedule...";
   try {
     const body = new FormData();
@@ -721,6 +812,7 @@ document.getElementById("extract").addEventListener("click", async () => {
       rows.innerHTML = "";
       refreshAll();
       status.textContent = "Could not build a schedule from that input. Try the rule-based extractor, or add rows by hand.";
+      setBuddy("error");
       return;
     }
     fillTableFromItems(items, course, origin, defaultTime, "AI draft");
@@ -733,9 +825,12 @@ document.getElementById("extract").addEventListener("click", async () => {
       status.textContent = "AI was unavailable, so the schedule was built from your typed classes instead (" + fallback.length + " item(s)).";
     } else {
       status.textContent = "AI could not build the schedule: " + error.message + " You can use the rule-based extractor instead.";
+      setBuddy("error");
     }
   } finally {
+    buddyBusy = false;
     button.disabled = false;
+    if (rows.querySelector("tr")) refreshAll();
   }
 });
 
