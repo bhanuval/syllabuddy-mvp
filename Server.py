@@ -61,6 +61,7 @@ Rules:
 - item is a short title. Do not invent titles.
 - due must be YYYY-MM-DD when the text gives a real calendar date.
 - A class meeting takes the date shown with its session (for example "Saturday, 12-Sep." becomes that date). Leave a class meeting's due empty only if the text gives no date.
+- course is the course code or name from the title or header of the document the item came from (for example "MOT 6115"), or "" if the document gives none. Use the same text for every item from the same document.
 - session is the number from the "Session N" heading the item sits under (for example "4"), or "" when the item is not under a session, such as a row in a table of deliverables.
 - Do not create a Class row for an asynchronous session that has no meeting date or time.
 - A reading listed under a class session takes that session's class date as due. A reading never takes a date from its citation.
@@ -90,7 +91,7 @@ ITEM_SCHEMA = {
             "items": {
                 "type": "object",
                 "additionalProperties": False,
-                "required": ["type", "item", "due", "time", "source", "details", "link", "flag", "session"],
+                "required": ["type", "item", "due", "time", "source", "details", "link", "flag", "session", "course"],
                 "properties": {
                     "type": {
                         "type": "string",
@@ -111,6 +112,7 @@ ITEM_SCHEMA = {
                     "link": {"type": "string"},
                     "flag": {"type": "string"},
                     "session": {"type": "string"},
+                    "course": {"type": "string"},
                 },
             },
         }
@@ -279,24 +281,25 @@ def find_source_line(name, syllabus):
 def drop_session_dates(items):
     """Readings only keep a date that matches a class meeting date. An assignment dated with a class date is dropped
     when a similar assignment has a different date, because the outline's session date is not a due date."""
-    class_dates = {i["due"] for i in items if i["type"] == "Class" and i["due"]}
-    by_session = {i.get("session"): i["due"] for i in items if i["type"] == "Class" and i["due"] and i.get("session")}
+    class_dates = {(i.get("course", ""), i["due"]) for i in items if i["type"] == "Class" and i["due"]}
+    by_session = {(i.get("course", ""), i.get("session")): i["due"] for i in items if i["type"] == "Class" and i["due"] and i.get("session")}
     out = [dict(i) for i in items]
     for i in out:
-        if i["type"] == "Reading" and i.get("session") in by_session:
-            i["due"] = by_session[i["session"]]       # a reading is due by its own session's class meeting
+        key = (i.get("course", ""), i.get("session"))
+        if i["type"] == "Reading" and key in by_session:
+            i["due"] = by_session[key]                # a reading is due by its own session's class meeting
     for i in out:
-        if i["type"] == "Reading" and i["due"] and class_dates and i["due"] not in class_dates:
+        if i["type"] == "Reading" and i["due"] and class_dates and (i.get("course", ""), i["due"]) not in class_dates:
             i["due"] = ""
             i["flag"] = "; ".join(x for x in (i["flag"], "date removed: not a class date") if x)
     plain = [k for k, i in enumerate(out) if i["type"] not in ("Reading", "Class") and i["due"]]
     drop = set()
     for k in plain:
-        if out[k]["due"] not in class_dates:
+        if (out[k].get("course", ""), out[k]["due"]) not in class_dates:
             continue
         tk = title_tokens(out[k]["item"])
         for j in plain:
-            if j == k or out[j]["due"] in class_dates or numbers_conflict(out[k]["item"], out[j]["item"]):
+            if j == k or out[j].get("course", "") != out[k].get("course", "") or (out[j].get("course", ""), out[j]["due"]) in class_dates or numbers_conflict(out[k]["item"], out[j]["item"]):
                 continue
             tj = title_tokens(out[j]["item"])
             common = token_overlap(tk, tj)
@@ -323,7 +326,7 @@ def merge_duplicates(items):
             if d in used_dated:
                 continue
             td = title_tokens(keep[d]["item"])
-            if numbers_conflict(keep[u]["item"], keep[d]["item"]):
+            if keep[u].get("course", "") != keep[d].get("course", "") or numbers_conflict(keep[u]["item"], keep[d]["item"]):
                 continue
             common = token_overlap(tu, td)
             diff = (len(tu) - common) + (len(td) - common)
@@ -344,7 +347,7 @@ def merge_duplicates(items):
             if d in used_dated:
                 continue
             td = title_tokens(keep[d]["item"])
-            if numbers_conflict(keep[u]["item"], keep[d]["item"]):
+            if keep[u].get("course", "") != keep[d].get("course", "") or numbers_conflict(keep[u]["item"], keep[d]["item"]):
                 continue
             common = token_overlap(tu, td)
             union = len(tu) + len(td) - common
@@ -408,6 +411,7 @@ def clean_items(raw_items, syllabus=""):
         details = str(raw.get("details") or "").strip()
         link = str(raw.get("link") or "").strip()
         session = str(raw.get("session") or "").strip()
+        course_name = str(raw.get("course") or "").strip()[:60]
         flags = []
         extra = str(raw.get("flag") or "").strip()
         if extra:
@@ -453,6 +457,7 @@ def clean_items(raw_items, syllabus=""):
                 "link": link,
                 "flag": "; ".join(dict.fromkeys(flags)),
                 "session": session,
+                "course": course_name,
             }
         )
     return cleaned
@@ -605,6 +610,97 @@ def openai_client():
     return OpenAI(api_key=api_key, timeout=100.0, max_retries=0)   # fail with a clear message before the web server gives up at 120 seconds
 
 
+TABLE_ROW = re.compile(
+    r"^\s*(\d{1,2})[.)]?\s+(.+?)\s+(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)[a-z]*\.?,?\s+([A-Za-z]{3,9}\.?\s+\d{1,2})\s*$"
+)
+
+
+def kind_from_title(title):
+    t = title.lower()
+    if "quiz" in t:
+        return "Quiz"
+    if "exam" in t or "midterm" in t:
+        return "Exam"
+    if "project" in t or "presentation" in t:
+        return "Project"
+    return "Assignment"
+
+
+def table_deliverables(text):
+    """Rows of a 'Deliverable / Due date' table, such as '5 Building an agent Sunday, Nov. 15'."""
+    rows = []
+    for line in (text or "").splitlines():
+        match = TABLE_ROW.match(line)
+        if not match:
+            continue
+        due = date_from_text(match.group(3), datetime.now().year)
+        if due:
+            rows.append({"title": match.group(2).strip(), "due": due, "line": line.strip()[:180]})
+    return rows
+
+
+def fill_from_table(items, text):
+    """The AI sometimes leaves a deliverable's date blank or returns only the outline's copy of it. When the syllabus has a
+    due-date table, undated items take the date of their best-matching table row (one row per item), and table rows that no
+    item matched are added. Every filled or added row is flagged so the student checks it."""
+    rows = table_deliverables(text)
+    if not rows:
+        return items
+    out = [dict(i) for i in items]
+    plain = [k for k, i in enumerate(out) if i["type"] not in ("Reading", "Class")]
+    used = set()
+    for k in plain:                       # rows that already have a dated twin are taken
+        if out[k]["due"]:
+            tk = title_tokens(out[k]["item"])
+            for r, row in enumerate(rows):
+                if row["due"] == out[k]["due"] and token_overlap(tk, title_tokens(row["title"])) >= 2:
+                    used.add(r)
+    pairs = []
+    for k in plain:
+        if out[k]["due"]:
+            continue
+        tk = title_tokens(out[k]["item"])
+        for r, row in enumerate(rows):
+            if numbers_conflict(out[k]["item"], row["title"]):
+                continue
+            tr = title_tokens(row["title"])
+            common = token_overlap(tk, tr)
+            union = len(tk) + len(tr) - common
+            if common >= 2 and union and common / union >= 0.4:
+                pairs.append((common / union, k, r))
+    filled = set()
+    for _score, k, r in sorted(pairs, reverse=True):
+        if k in filled or r in used:
+            continue
+        filled.add(k)
+        used.add(r)
+        out[k]["due"] = rows[r]["due"]
+        out[k]["flag"] = "; ".join(x for x in (out[k]["flag"], "date taken from the deliverables table") if x)
+        if len(out[k]["source"]) < 4 or out[k]["source"].isdigit():
+            out[k]["source"] = rows[r]["line"]
+    if re.search(r"Deliverable\s+Due date", text or "", re.I):
+        courses = {i.get("course", "") for i in out if i.get("course")}
+        course_name = courses.pop() if len(courses) == 1 else ""
+        for r, row in enumerate(rows):
+            if r in used:
+                continue
+            out.append(
+                {
+                    "type": kind_from_title(row["title"]),
+                    "item": row["title"],
+                    "due": row["due"],
+                    "time": "",
+                    "source": row["line"],
+                    "details": "",
+                    "link": "",
+                    "flag": "added from the deliverables table",
+                    "session": "",
+                    "course": course_name,
+                }
+            )
+    return out
+
+
 def extract_items(syllabus, course, notes, images, default_time=""):
     client = openai_client()
     user_text = (
@@ -653,7 +749,43 @@ def extract_items(syllabus, course, notes, images, default_time=""):
         parsed = json.loads(raw_text)
     except json.JSONDecodeError as error:
         raise RuntimeError("The AI did not return valid JSON.") from error
-    return merge_duplicates(drop_session_dates(clean_items(parsed.get("items"), syllabus)))
+    return fill_from_table(merge_duplicates(drop_session_dates(clean_items(parsed.get("items"), syllabus))), syllabus)
+
+
+MAX_DOCUMENTS = 5
+
+
+def split_documents(syllabus):
+    """The pasted text and each uploaded file become separate documents, so each gets its own AI request."""
+    parts = re.split(r"\n\n(?=File: |Pasted text:\n)", syllabus or "")
+    return [part.strip() for part in parts if part.strip()]
+
+
+def extract_all(syllabus, course, notes, images, default_time):
+    """One AI request per document (and one for all screenshots). A long answer for two syllabi in one request can leave the
+    second one out, and separate requests also keep session numbers and course names from mixing across documents."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    jobs = [(doc, []) for doc in split_documents(syllabus)[:MAX_DOCUMENTS]]
+    if images:
+        jobs.append(("", images))
+    if not jobs:
+        return [], []
+    if len(jobs) == 1:
+        return extract_items(jobs[0][0], course, notes, jobs[0][1], default_time), []
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        futures = [pool.submit(extract_items, doc, course, notes, imgs, default_time) for doc, imgs in jobs]
+        items, warnings, last_error = [], [], None
+        for (doc, imgs), future in zip(jobs, futures):
+            label = (doc.splitlines()[0][:60] if doc else "the screenshots").strip()
+            try:
+                items.extend(future.result())
+            except Exception as error:
+                last_error = error
+                warnings.append("Could not read " + label + ". The rest of your files were read.")
+    if not items and last_error is not None:
+        raise last_error
+    return items, warnings
 
 
 def request_payload():
@@ -721,7 +853,7 @@ def extract():
     if len(syllabus) > MAX_TEXT_CHARS:
         syllabus = syllabus[:MAX_TEXT_CHARS]
     try:
-        items = extract_items(syllabus, course, notes, images, default_time)
+        items, warnings = extract_all(syllabus, course, notes, images, default_time)
     except RuntimeError as error:
         return json_error(str(error), 500)          # messages written in this file, safe to show
     except Exception as error:
@@ -734,6 +866,7 @@ def extract():
             "origin": origin,
             "files": names,
             "skipped": getattr(g, "skipped", []),
+            "warnings": warnings,
         }
     )
 

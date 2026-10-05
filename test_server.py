@@ -126,6 +126,79 @@ if _canvas:
     _text = Server.extract_pdf(_b.getvalue())
     assert "PAGEMARK1" in _text and "PAGEMARK60" in _text and "PAGEMARK70" not in _text
 
+# Two syllabi in one upload: session numbers repeat, so dates must not cross courses
+def r4(kind, name, due, source, session="", course=""):
+    return {"type": kind, "item": name, "due": due, "time": "", "source": source, "details": "", "link": "", "flag": "", "session": session, "course": course}
+two = [
+    r4("Class", "Deep Learning", "2026-10-30", "Friday, 30-Oct.", "4", "MOT 6115"),
+    r4("Class", "Strategy through Experiments", "2026-10-09", "Friday 9 October", "4", "MOT 6111"),
+    r4("Reading", "Agentic Organization", "2025-09-26", "McKinsey (2025, Sept. 26)", "4", "MOT 6115"),
+    r4("Reading", "Smart Business Experiments", "", "Study: i.", "4", "MOT 6111"),
+    r4("Assignment", "Team Project", "2026-12-04", "Friday, Dec. 4", "", "MOT 6115"),
+    r4("Assignment", "Team Project Presentation", "2026-11-15", "Sunday 15 November", "", "MOT 6111"),
+    r4("Assignment", "Team Project", "", "Team Project 25%", "", "MOT 6115"),
+]
+res = Server.merge_duplicates(Server.drop_session_dates(Server.clean_items(two, "x")))
+pick = {(i["course"], i["item"], i["type"]): i["due"] for i in res}
+assert pick[("MOT 6115", "Agentic Organization", "Reading")] == "2026-10-30"
+assert pick[("MOT 6111", "Smart Business Experiments", "Reading")] == "2026-10-09"
+assert pick[("MOT 6111", "Team Project Presentation", "Assignment")] == "2026-11-15"   # not merged into the other course's row
+assert sum(1 for i in res if i["item"] == "Team Project" and i["course"] == "MOT 6115") == 1   # undated copy merged within its own course
+
+# One AI request per file: both documents are read, and one failing document does not lose the other
+calls = []
+def per_doc(syllabus, course, notes, images, default_time=""):
+    calls.append(syllabus[:20])
+    if "BOOM" in syllabus:
+        raise Exception("provider failure")
+    name = "From " + syllabus.splitlines()[0]
+    return [{"type": "Assignment", "item": name, "due": "2026-10-12", "time": "", "source": "x", "details": "", "link": "", "flag": "", "session": "", "course": ""}]
+Server.extract_items = per_doc
+r = c.post("/extract", data={"files": [(io.BytesIO(b"one"), "a.txt"), (io.BytesIO(b"two"), "b.txt")]}, content_type="multipart/form-data")
+d = r.get_json()
+assert r.status_code == 200 and len(calls) == 2 and len(d["items"]) == 2 and d["warnings"] == [], (calls, d)
+calls.clear()
+r = c.post("/extract", data={"files": [(io.BytesIO(b"fine"), "ok.txt"), (io.BytesIO(b"BOOM"), "bad.txt")]}, content_type="multipart/form-data")
+d = r.get_json()
+assert r.status_code == 200 and len(d["items"]) == 1 and "Could not read File: bad.txt" in d["warnings"][0], d
+r = c.post("/extract", data={"files": [(io.BytesIO(b"BOOM"), "bad.txt"), (io.BytesIO(b"BOOM"), "bad2.txt")]}, content_type="multipart/form-data")
+assert r.status_code == 502
+Server.extract_items = fake
+
+# Missing dates come from the syllabus's own deliverables table; unmatched table rows are added; the table is per document
+table_text = """Due Dates
+Deliverable Due date
+1 Bus. Analy. using Orange (1): Introduction Sunday, Sept. 20
+2 Bus. Analy. using Orange (2): Decision Trees Sunday, Oct. 4
+3 Bus. Analy. using Orange (3): Clustering Sunday, Oct. 18
+4 Building a Customer Service Agent with n8n Sunday, Nov. 15
+5 Team Project (presentation in Session 6) Friday, Dec. 4
+6 Agentic Workflows with Codex (individual) Wed., Dec. 16
+Other text follows."""
+def r5(name, due="", kind="Assignment", source="Session 1"):
+    return {"type": kind, "item": name, "due": due, "time": "", "source": source, "details": "", "link": "", "flag": "", "session": "", "course": ""}
+rows = Server.table_deliverables(table_text)
+assert [x["due"][5:] for x in rows] == ["09-20", "10-04", "10-18", "11-15", "12-04", "12-16"], rows
+ai_items = [r5("Business Analytics using Orange: Introduction"), r5("Business Analytics using Orange: Decision Trees"),
+            r5("Building AI Agents with n8n"), r5("Team Project"), r5("Agentic Operations with Codex"),
+            r5("Some reading", "2026-09-12", "Reading")]
+filled = Server.fill_from_table(ai_items, table_text)
+got = {i["item"]: i["due"] for i in filled}
+assert got["Business Analytics using Orange: Introduction"].endswith("09-20")
+assert got["Business Analytics using Orange: Decision Trees"].endswith("10-04")
+assert got["Building AI Agents with n8n"].endswith("11-15")
+assert got["Team Project"].endswith("12-04")
+assert got["Agentic Operations with Codex"].endswith("12-16")
+added = [i for i in filled if i["flag"] == "added from the deliverables table"]
+assert len(added) == 1 and added[0]["item"].startswith("Bus. Analy. using Orange (3)") and added[0]["due"].endswith("10-18")
+assert got["Some reading"] == "2026-09-12"                                  # readings are never touched
+assert all("deliverables table" in i["flag"] for i in filled if i["item"] != "Some reading")
+# no table, no change; a dated item is not changed or duplicated
+assert Server.fill_from_table(ai_items, "no table here") == ai_items
+dated = [r5("Bus. Analy. using Orange (1): Introduction", "2026-09-20")]
+kept = Server.fill_from_table(dated, table_text)
+assert [i["item"] for i in kept].count("Bus. Analy. using Orange (1): Introduction") == 1 and kept[0]["due"] == "2026-09-20"
+
 from docx import Document
 d = Document(); d.add_paragraph("Quiz 1 due Oct 12 at 6 PM"); b = io.BytesIO(); d.save(b); b.seek(0)
 r = c.post("/extract", data={"files": (b, "syl.docx")}, content_type="multipart/form-data")

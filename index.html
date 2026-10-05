@@ -95,6 +95,7 @@
       <button id="extract" class="primary">Build schedule with AI</button>
       <button id="rules" class="linkish" type="button">Or use the simpler rule-based extractor</button>
     </div>
+    <p id="restored" class="note" role="status" hidden>We restored your list from earlier in this tab. <button id="startFresh" type="button" class="linkish">Start a new list</button></p>
     <p id="status" class="note" role="status"></p>
     <p id="count" role="status"></p>
   </section>
@@ -146,7 +147,7 @@
     <p class="note">Timed items become events that end at the due time. Rows with no valid date are left out of the calendar.</p>
   </section>
 
-  <p class="privacy note">Privacy: paste only text you are allowed to use. The pasted text or uploaded files are sent to our server and then to OpenAI so AI can extract items. The API key stays on the server. This page does not require an account. Nothing is saved on the server; your list is stored only in this browser.</p>
+  <p class="privacy note">Privacy: paste only text you are allowed to use. The pasted text or uploaded files are sent to our server and then to OpenAI so AI can extract items. The API key stays on the server. This page does not require an account. Nothing is saved on the server. Your list stays in this browser tab so a refresh does not lose it, and it is cleared when you close the tab.</p>
 </main>
 
 <script src="/rules-extractor.js"></script>
@@ -267,7 +268,7 @@ function rowData(tr) {
 }
 
 function saveRows() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify({
+  sessionStorage.setItem(STORAGE_KEY, JSON.stringify({
     course: document.getElementById("course").value,
     defaultTime: document.getElementById("defaultTime").value,
     origin: document.getElementById("origin").value,
@@ -278,7 +279,7 @@ function saveRows() {
 
 function loadRows() {
   try {
-    const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+    const saved = JSON.parse(sessionStorage.getItem(STORAGE_KEY) || "null");
     if (!saved) return;
     document.getElementById("course").value = saved.course || "";
     document.getElementById("defaultTime").value = saved.defaultTime || "";
@@ -286,6 +287,9 @@ function loadRows() {
     document.getElementById("reminder").value = saved.reminder || "";
     (saved.rows || []).forEach(addRow);
     refreshAll();
+    if ((saved.rows || []).length) {
+      document.getElementById("restored").hidden = false;
+    }
   } catch (error) {
     console.error(error);
   }
@@ -385,6 +389,13 @@ document.querySelectorAll("thead th").forEach((th, i) => {
 });
 markHeaders();
 loadRows();
+document.getElementById("startFresh").addEventListener("click", () => {
+  rows.innerHTML = "";
+  sessionStorage.removeItem(STORAGE_KEY);
+  document.getElementById("restored").hidden = true;
+  refreshAll();
+  status.textContent = "Started a new list.";
+});
 
 ["course", "defaultTime", "origin", "reminder"].forEach((id) => {
   document.getElementById(id).addEventListener("input", saveRows);
@@ -498,11 +509,14 @@ function scheduleFromText(text, defaultTime, year) {
 
 function fillTableFromItems(items, course, origin, defaultTime) {
   rows.innerHTML = "";
+  // With several syllabi in one upload, each row keeps the course the AI read from its own document.
+  const found = new Set(items.map((i) => i.course).filter(Boolean));
+  const useTyped = course && found.size <= 1;
   items.forEach((item) => {
     let time = item.time || "";
     if (!time && item.type !== "Reading" && item.type !== "Class" && defaultTime) time = defaultTime;
     addRow({
-      course: course,
+      course: useTyped ? course : (item.course || course),
       type: TYPES.includes(item.type) ? item.type : "Assignment",
       item: item.item,
       due: item.due,
@@ -578,7 +592,7 @@ document.getElementById("extract").addEventListener("click", async () => {
       return;
     }
     fillTableFromItems(items, course, origin, defaultTime);
-    status.textContent = "AI built a schedule with " + items.length + " item(s). Check every row before you export.";
+    status.textContent = "AI built a schedule with " + items.length + " item(s). Check every row before you export." + (data.warnings && data.warnings.length ? " " + data.warnings.join(" ") : "");
   } catch (error) {
     console.error(error);
     const fallback = scheduleFromText(syllabus, defaultTime, new Date().getFullYear());
