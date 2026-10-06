@@ -216,7 +216,9 @@
     <div class="row">
       <label for="reminder">Calendar reminder</label>
       <select id="reminder" style="width:auto">
-      <option value="">None</option>
+      <option value="smart" selected>Recommended (assignments: 1 week and 1 hour before; readings: 1 day before; classes: 1 hour before)</option>
+      <option value="none">None</option>
+      <option value="week">1 week before</option>
       <option value="day">1 day before</option>
       <option value="hour">1 hour before</option>
       <option value="both">1 day and 1 hour before</option>
@@ -224,7 +226,7 @@
       <button id="ics" class="primary">Download calendar (.ics)</button>
       <button id="csv" class="secondary">Download CSV</button>
     </div>
-    <p class="note">Timed items become events that end at the due time. Rows with no valid date are left out of the calendar.</p>
+    <p class="note">Timed items become events that end at the due time. Rows with no valid date are left out of the calendar. Reminders are set inside the calendar file. Untimed items alert at 9 AM.</p>
     <p id="exportNote" class="note" role="status"></p>
   </section>
 
@@ -453,7 +455,7 @@ function loadRows() {
     document.getElementById("course").value = saved.course || "";
     document.getElementById("defaultTime").value = saved.defaultTime || "";
     document.getElementById("origin").value = saved.origin || "Syllabus";
-    document.getElementById("reminder").value = saved.reminder || "";
+    document.getElementById("reminder").value = saved.reminder || "smart";
     (saved.rows || []).forEach(addRow);
     refreshAll();
     if ((saved.rows || []).length) {
@@ -512,7 +514,20 @@ function buildICS(list, reminder, now) {
   now = now || new Date();
   const stamp = now.getUTCFullYear() + p2(now.getUTCMonth() + 1) + p2(now.getUTCDate()) + "T" + p2(now.getUTCHours()) + p2(now.getUTCMinutes()) + p2(now.getUTCSeconds()) + "Z";
   const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//SyllaBuddy//Syllabus deadlines//EN", "CALSCALE:GREGORIAN"];
-  const offsets = reminder === "day" ? ["-P1D"] : reminder === "hour" ? ["-PT1H"] : reminder === "both" ? ["-P1D", "-PT1H"] : [];
+  // All-day events alert at 9 AM (not midnight): "-PT15H" is 9 AM the day before, "-P6DT15H" is 9 AM seven days before.
+  const offsetsFor = (type, timed) => {
+    const assignmentLike = ["Assignment", "Quiz", "Exam", "Project"].indexOf(type) >= 0;
+    if (reminder === "smart") {
+      if (assignmentLike) return timed ? ["-P7D", "-PT1H"] : ["-P6DT15H"];
+      if (type === "Class") return timed ? ["-PT1H"] : [];
+      return timed ? ["-P1D"] : ["-PT15H"];
+    }
+    if (reminder === "week") return [timed ? "-P7D" : "-P6DT15H"];
+    if (reminder === "day") return [timed ? "-P1D" : "-PT15H"];
+    if (reminder === "hour") return timed ? ["-PT1H"] : [];
+    if (reminder === "both") return timed ? ["-P1D", "-PT1H"] : ["-PT15H"];
+    return [];
+  };
   let count = 0, skipped = 0;
   // Readings with the same course, date, and time become one calendar item that lists them all.
   const events = [];
@@ -571,8 +586,7 @@ function buildICS(list, reminder, now) {
     }
     lines.push(fold("X-ALT-DESC;FMTTYPE=text/html:" + icsEscape("<html><body>" + html + "</body></html>")));
     if (link) lines.push(fold("URL:" + link));
-    offsets.forEach((o) => {
-      if (!tm && o !== "-P1D") return;
+    offsetsFor(r.type, !!tm).forEach((o) => {
       lines.push("BEGIN:VALARM", "ACTION:DISPLAY", "DESCRIPTION:" + icsEscape(many ? ev.rows.length + " readings" : r.item), (tm ? "TRIGGER;RELATED=END:" : "TRIGGER:") + o, "END:VALARM");
     });
     lines.push("END:VEVENT");
